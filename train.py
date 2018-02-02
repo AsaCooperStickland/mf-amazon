@@ -94,7 +94,7 @@ init_train = train_dataset.make_one_shot_iterator()
 init_val = val_dataset.make_initializable_iterator()
 
 u_idx, v_idx, time, r = it.get_next()
-MSE, MAE, summary_op, train_step_u, train_step_v, v = smf.build_graph(u_idx, v_idx, r)
+RMSE, MAE, summary_op, train_step_u, train_step_v, v = smf.build_graph(u_idx, v_idx, r)
   # get graph operations (ops)
 
 global_step = tf.Variable(0, name='global_step', trainable=False)
@@ -119,13 +119,14 @@ with tf.Session() as sess:
     training_handle = sess.run(init_train.string_handle())
     val_handle = sess.run(init_val.string_handle())
     sess.run(init_op) # actually running the initialization op
-    train_saver = tf.train.Saver()  # saver object that will save our graph so we can reload it later for continuation of
+    train_saver = tf.train.Saver()  # saver object that will save our graph so we can reload it later
     val_saver = tf.train.Saver()
     #  training or inference
     continue_from_epoch = -1
     if continue_from_epoch != -1:
+        # restore previous graph to continue operations
         train_saver.restore(sess, "{}/{}_{}.ckpt".format(saved_models_filepath, experiment_name,
-                                                   continue_from_epoch))  # restore previous graph to continue operations
+                                                   continue_from_epoch))
     best_val_RMSE_loss = 0.
 
     with tqdm.tqdm(total=epochs) as epoch_pbar:
@@ -135,16 +136,13 @@ with tf.Session() as sess:
             with tqdm.tqdm(total=total_train_batches) as pbar_train:
                 for batch_idx in range(total_train_batches):
                     iter_id = e * total_train_batches + batch_idx
-                    '''_u_idx, _v_idx, _time, _r, _v = sess.run([u_idx, v_idx, time, r, v])
-                    print(_v)'''
-                    #feed_dict = smf.construct_feeddict(u_idx, v_idx, r)
                     rmse_train, mae_train, summary_str, u_update, v_update =\
-                        sess.run([MSE, MAE, summary_op, train_step_u, train_step_v],
+                        sess.run([RMSE, MAE, summary_op, train_step_u, train_step_v],
                         feed_dict={handle: training_handle})
-                    # Here we execute the c_error_opt_op which trains the network and also the ops that compute the
-                    # loss and accuracy, we save those in _, c_loss_value and acc respectively.
-                    total_RMSE_loss += rmse_train  # add loss of current iter to sum
-                    total_MAE_loss += mae_train # add acc of current iter to sum
+                    # Here we execute u_update, v_update which train the network and also the ops that compute
+                    # rmse and mae.
+                    total_RMSE_loss += rmse_train
+                    total_MAE_loss += mae_train
 
                     iter_out = "iter_num: {}, train_RMSE: {},"\
                                 "train_MAE: {}, batch_RMSE: {}".format(iter_id,
@@ -163,13 +161,13 @@ with tf.Session() as sess:
 
             total_val_RMSE_loss = 0.
             total_val_MAE_loss = 0. #  run validation stage, note how training_phase placeholder is set to False
-            # and that we do not run the c_error_opt_op which runs gradient descent, but instead only call the loss ops
-            #  to collect losses on the validation set
+            # and that we do not run u_update, v_update which run gradient descent, but instead only call the
+            # loss ops to collect losses on the validation set.
             sess.run(init_val.initializer)
             with tqdm.tqdm(total=total_val_batches) as pbar_val:
                 for batch_idx in range(total_val_batches):
                     rmse_val, mae_val, summary_str =\
-                        sess.run([MSE, MAE, summary_op],
+                        sess.run([RMSE, MAE, summary_op],
                                  feed_dict={handle: val_handle})
                     total_val_RMSE_loss += rmse_val
                     total_val_MAE_loss += mae_val
@@ -186,7 +184,9 @@ with tf.Session() as sess:
                 #  after the final epoch
                 best_val_RMSE_loss = total_val_RMSE_loss
                 best_epoch = e
-                save_path = val_saver.save(sess, "{}/best_validation_{}_{}.ckpt".format(saved_models_filepath, experiment_name, e))
+                save_path = val_saver.save(sess,
+                                           "{}/best_validation_{}_{}.ckpt".format(saved_models_filepath,
+                                                                                  experiment_name, e))
                 print("Saved best validation score model at", save_path)
 
             epoch_pbar.update(1)
@@ -195,7 +195,8 @@ with tf.Session() as sess:
                             [e, total_RMSE_loss, total_MAE_loss, total_val_RMSE_loss, total_val_MAE_loss,
                              -1, -1])
 
-        val_saver.restore(sess, "{}/best_validation_{}_{}.ckpt".format(saved_models_filepath, experiment_name, best_epoch))
+        val_saver.restore(sess, "{}/best_validation_{}_{}.ckpt".format(saved_models_filepath,
+                                                                       experiment_name, best_epoch))
         # restore model with best performance on validation set
         '''total_test_c_loss = 0.
         total_test_accuracy = 0.
