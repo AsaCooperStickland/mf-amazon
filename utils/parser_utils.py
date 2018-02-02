@@ -10,7 +10,7 @@ class ParserClass(object):
                             help='Experiment log path, '
                                  'where tensorboard is saved, '
                                  'along with .csv of results')
-        parser.add_argument('--experiment_prefix', nargs="?", type=str, default="classification",
+        parser.add_argument('--experiment_prefix', nargs="?", type=str, default="mf",
                             help='Experiment name without hp details')
         parser.add_argument('--continue_epoch', nargs="?", type=int, default=-1, help="ID of epoch to continue from, "
                                                                                       "-1 means from scratch")
