@@ -17,7 +17,7 @@ import pandas as pd
 import datetime as dt
 import pickle
 
-data_dir = '../data/'
+data_dir = '../data/ml/'
 
 gap = np.array([2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096])
 # gap = [2, 7, 15, 30, 60,]
@@ -36,12 +36,13 @@ def proc_time_emb(hist_t, cur_t):
 def gen_data(data_list):
     store_users = {}
     store_items = {}
-    with open('../data/ratings_Musical_Instruments.csv', 'r') as f:
+    with open('../data/ml/ratings.dat', 'r') as f:
         num_user = 0
         num_item = 0
         num_rating = 0
         for line in f.readlines():
-            tokens = line.strip().split(',')
+            tokens = line.strip().split('::')
+            #print(tokens)
             if tokens[0] not in store_users:
                 store_users[tokens[0]] = num_user
                 num_user += 1
@@ -129,9 +130,9 @@ def write_days_to_bin(data_list, out_file):
     names = [int(name) for name, examples in day_dict.items()]
     names = sorted(names)
 
-    with open(data_dir + out_file + 'filenames.txt', 'w') as writer:
+    with open(data_dir + out_file + '_filenames.txt', 'w') as writer:
         for name in names:
-            string_to_write = '\t'.join(['./data/days/' + out_file +
+            string_to_write = '\t'.join([data_dir + 'days/' + out_file +
                                         str(name) + '.tfrecords',
                                         str(number_dict[str(name)])])
             writer.write(string_to_write + '\n')

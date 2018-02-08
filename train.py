@@ -9,23 +9,40 @@ from utils.parser_utils import ParserClass
 from utils.storage import build_experiment_folder, save_statistics
 from sklearn.model_selection import KFold
 
-from smf import SMF
+from smf import SMF, BaseSMF
 
 tf.reset_default_graph()  # resets any previous graphs to clear memory
 parser = argparse.ArgumentParser(description='Welcome to MF experiments script')  # generates an argument parser
 parser_extractor = ParserClass(parser=parser)  # creates a parser class to process the parsed input
 
-batch_size, seed, epochs, logs_path, continue_from_epoch, tensorboard_enable,\
- experiment_prefix, l2_weight, latent_dim,\
- learning_rate = parser_extractor.get_argument_variables()
+dataset, batch_size, seed, epochs, logs_path, continue_from_epoch,\
+    tensorboard_enable, experiment_prefix, day_split, l2_weight, latent_dim,\
+    learning_rate, train_fraction = parser_extractor.get_argument_variables()
+
+# No. updates to check val set after
+update_number = 20000
+
+if dataset == "ml1m":
+    num_users = 6040
+    num_items = 3706
+    num_ratings = 1000209
+    data_dir = "./data/ml/"
+    print("Using movie-lens 1M dataset.")
+
+if dataset == "amazon":
+    num_users = 339231
+    num_items = 83046
+    num_ratings = 500176
+    data_dir = "./data/"
+    print("Using Amazon datset.")
+else:
+    raise NameError("Unrecognized dataset!")
 
 
-num_users = 339231
-num_items = 83046
-num_ratings = 500176
-experiment_name = "experiment_{}_batch_size_{}_l2_{}_dim_{}".format(experiment_prefix,
+experiment_name = "experiment_{}_batch_size_{}_l2_{}_dim_{}_frac_{}_lr_{}".format(experiment_prefix,
                                                                    batch_size, l2_weight,
-                                                                   latent_dim)
+                                                                   latent_dim, train_fraction,
+                                                                   learning_rate)
 batch_sizes = [256, 512, 1024]
 # reg_lambdas = [0, 1e-10, 1e-7, 1e-5]
 reg_lambdas = [2, 1e-5, 1e-3, 1e-1, 1]
@@ -36,6 +53,47 @@ print("Running {}".format(experiment_name))
 print("Starting from epoch {}".format(continue_from_epoch))
 
 saved_models_filepath, logs_filepath = build_experiment_folder(experiment_name, logs_path)  # generate experiment dir
+
+
+def val_check(sess, best_val_RMSE_loss):
+    total_val_MSE_loss = 0.
+    total_val_MAE_loss = 0.
+    sess.run(init_val.initializer)
+    with tqdm.tqdm(total=total_val_batches) as pbar_val:
+        for batch_idx in range(total_val_batches):
+            mae_val, cost_val, summary_str =\
+                sess.run([MAE, cost, summary_op],
+                         feed_dict={handle: val_handle})
+            total_val_MSE_loss += cost_val
+            total_val_MAE_loss += mae_val
+            iter_out = "val_rmse: {}, val_mae: {}".format(total_val_MSE_loss / (batch_idx + 1),
+                                                          total_val_MAE_loss / (batch_idx + 1))
+            pbar_val.set_description(iter_out)
+            pbar_val.update(1)
+
+    total_val_MSE_loss /= (total_val_batches * batch_size)
+    total_val_RMSE_loss = total_val_MSE_loss**0.5
+    total_val_MAE_loss /= total_val_batches
+
+    if best_val_RMSE_loss < total_val_RMSE_loss:  # check if val acc better than the previous best and if
+        # so save current as best and save the model as the best validation model to be used on the test set
+        #  after the final epoch
+        best_val_RMSE_loss = total_val_RMSE_loss
+        best_epoch = e
+        save_path = val_saver.save(sess,
+                                   "{}/best_validation_{}_{}.ckpt".format(saved_models_filepath,
+                                                                          experiment_name, e))
+        print("Saved best validation score model at", save_path)
+
+    epoch_pbar.update(1)
+    # save statistics of this epoch, train and val without test set performance
+    save_statistics(logs_filepath, "result_summary_statistics",
+                    [e, total_RMSE_loss, total_MAE_loss, total_val_RMSE_loss, total_val_MAE_loss,
+                     -1, -1])
+    return best_val_RMSE_loss
+
+
+
 def decode(serialized_example):
     features = tf.parse_single_example(
                           serialized_example,
@@ -85,8 +143,26 @@ if continue_from_epoch == -1:  # if this is a new experiment and not
 start_epoch = continue_from_epoch if continue_from_epoch != -1 else 0  # if new experiment start from 0 otherwise
 # continue where left off
 
-train_dataset = create_dataset('./data/train_dataset.tfrecords')
-val_dataset = create_dataset('./data/val_dataset.tfrecords')
+if day_split:
+    with open(data_dir + 'train_datasetfilenames.txt', 'r') as f:
+        filenames = []
+        example_counter = []
+        for line in f:
+            filename, examples = line.strip().split('\t')
+            filenames.append(filename)
+            example_counter.append(int(examples))
+        #filenames = [line.rstrip() for line in f]
+        file_number = int((1. - train_fraction) * len(filenames))
+        filenames = filenames[file_number:]
+        example_counter = example_counter[file_number:]
+        train_examples = sum(example_counter)
+        print('loading {} examples'.format(train_examples))
+else:
+    filenames = data_dir + 'train_dataset.tfrecords'
+    print('loading all examples')
+
+train_dataset = create_dataset(filenames)
+val_dataset = create_dataset(data_dir + 'val_dataset.tfrecords')
 handle = tf.placeholder(tf.string, shape=[])
 it = tf.contrib.data.Iterator.from_string_handle(handle, train_dataset.output_types, train_dataset.output_shapes)
 
@@ -94,7 +170,7 @@ init_train = train_dataset.make_one_shot_iterator()
 init_val = val_dataset.make_initializable_iterator()
 
 u_idx, v_idx, time, r = it.get_next()
-RMSE, MAE, summary_op, train_step_u, train_step_v, v = smf.build_graph(u_idx, v_idx, r)
+RMSE, MAE, cost, summary_op, train_step_u, train_step_v = smf.build_graph(u_idx, v_idx, r)
   # get graph operations (ops)
 
 global_step = tf.Variable(0, name='global_step', trainable=False)
@@ -103,7 +179,12 @@ val_saver = tf.train.Saver()
 train_size = int(0.8*num_ratings)
 val_size = int(0.5*(num_ratings - train_size))
 
-total_train_batches = int(train_size/batch_size)
+if day_split:
+    total_train_batches = int(train_examples/batch_size)
+    print('Using {} examples out of total {}'.format(train_examples, train_size))
+else:
+    total_train_batches = int(train_size/batch_size)
+    print('Using {} examples out of total {}'.format(train_size, train_size))
 total_val_batches = int(val_size/batch_size)
 #total_test_batches = = int(int(0.8*num_ratings)/batch_size)
 
@@ -136,8 +217,8 @@ with tf.Session() as sess:
             with tqdm.tqdm(total=total_train_batches) as pbar_train:
                 for batch_idx in range(total_train_batches):
                     iter_id = e * total_train_batches + batch_idx
-                    rmse_train, mae_train, summary_str, u_update, v_update =\
-                        sess.run([RMSE, MAE, summary_op, train_step_u, train_step_v],
+                    rmse_train, mae_train, cost_train, summary_str, u_update, v_update =\
+                        sess.run([RMSE, MAE, cost, summary_op, train_step_u, train_step_v],
                         feed_dict={handle: training_handle})
                     # Here we execute u_update, v_update which train the network and also the ops that compute
                     # rmse and mae.
@@ -151,6 +232,8 @@ with tf.Session() as sess:
                                                              rmse_train)
                     pbar_train.set_description(iter_out)
                     pbar_train.update(1)
+                    if batch_idx % int(update_number/batch_size) == 0:
+                        best_val_RMSE_loss = val_check(sess, best_val_RMSE_loss)
                     if tensorboard_enable and batch_idx % 25 == 0:  # save tensorboard summary every 25 iterations
                         _summary = sess.run([summary_op],
                                             feed_dict={handle: training_handle})
@@ -159,41 +242,7 @@ with tf.Session() as sess:
             total_RMSE_loss /= total_train_batches  # compute mean of los
             total_MAE_loss /= total_train_batches # compute mean of accuracy
 
-            total_val_RMSE_loss = 0.
-            total_val_MAE_loss = 0. #  run validation stage, note how training_phase placeholder is set to False
-            # and that we do not run u_update, v_update which run gradient descent, but instead only call the
-            # loss ops to collect losses on the validation set.
-            sess.run(init_val.initializer)
-            with tqdm.tqdm(total=total_val_batches) as pbar_val:
-                for batch_idx in range(total_val_batches):
-                    rmse_val, mae_val, summary_str =\
-                        sess.run([RMSE, MAE, summary_op],
-                                 feed_dict={handle: val_handle})
-                    total_val_RMSE_loss += rmse_val
-                    total_val_MAE_loss += mae_val
-                    iter_out = "val_rmse: {}, val_mae: {}".format(total_val_RMSE_loss / (batch_idx + 1),
-                                                                  total_val_MAE_loss / (batch_idx + 1))
-                    pbar_val.set_description(iter_out)
-                    pbar_val.update(1)
-
-            total_val_RMSE_loss /= total_val_batches
-            total_val_MAE_loss /= total_val_batches
-
-            if best_val_RMSE_loss < total_val_RMSE_loss:  # check if val acc better than the previous best and if
-                # so save current as best and save the model as the best validation model to be used on the test set
-                #  after the final epoch
-                best_val_RMSE_loss = total_val_RMSE_loss
-                best_epoch = e
-                save_path = val_saver.save(sess,
-                                           "{}/best_validation_{}_{}.ckpt".format(saved_models_filepath,
-                                                                                  experiment_name, e))
-                print("Saved best validation score model at", save_path)
-
-            epoch_pbar.update(1)
-            # save statistics of this epoch, train and val without test set performance
-            save_statistics(logs_filepath, "result_summary_statistics",
-                            [e, total_RMSE_loss, total_MAE_loss, total_val_RMSE_loss, total_val_MAE_loss,
-                             -1, -1])
+            best_val_RMSE_loss = val_check(sess, best_val_RMSE_loss)
 
         val_saver.restore(sess, "{}/best_validation_{}_{}.ckpt".format(saved_models_filepath,
                                                                        experiment_name, best_epoch))

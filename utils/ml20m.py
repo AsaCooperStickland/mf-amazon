@@ -17,7 +17,7 @@ import pandas as pd
 import datetime as dt
 import pickle
 
-data_dir = '../data/'
+data_dir = '../data/ml20/'
 
 gap = np.array([2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096])
 # gap = [2, 7, 15, 30, 60,]
@@ -36,11 +36,11 @@ def proc_time_emb(hist_t, cur_t):
 def gen_data(data_list):
     store_users = {}
     store_items = {}
-    with open('../data/ratings_Musical_Instruments.csv', 'r') as f:
+    with open('../data/ml20/ratings.csv', 'r') as f:
         num_user = 0
         num_item = 0
         num_rating = 0
-        for line in f.readlines():
+        for line in f.readlines()[1:]:
             tokens = line.strip().split(',')
             if tokens[0] not in store_users:
                 store_users[tokens[0]] = num_user
@@ -50,7 +50,7 @@ def gen_data(data_list):
                 num_item += 1
             user_id = store_users[tokens[0]]
             item_id = store_items[tokens[1]]
-            rating = int(float(tokens[2]))
+            rating = float(tokens[2])
             time = int(tokens[3])
             day = time // 3600 // 24
             data_list.append((user_id, item_id, time, rating, day))
@@ -73,15 +73,19 @@ def split_data(data_list, num_rating):
             print(time // 3600 // 24 // 365 - 28 + 1997)'''
 
     train_list = data_list[:int(0.8*num_rating)]
-    test = data_list[int(0.8*num_rating):]
-    random.shuffle(test)
-    val_list, test_list = test[:int(0.5*len(test))], test[int(0.5*len(test)):]
-    val_list, test_list = sorted(val_list, key=get_key), sorted(test_list, key=get_key)
-    return train_list, val_list, test_list, test
+    #test = data_list[int(0.8*num_rating):]
+    #random.shuffle(test)
+    val_list, test_list = data_list[int(0.8*num_rating):int(0.9*num_rating)], data_list[int(0.9*num_rating):]
+    #val_list, test_list = sorted(val_list, key=get_key), sorted(test_list, key=get_key)
+    return train_list, val_list, test_list
 
 
 def _int64_feature(value):
     return tf.train.Feature(int64_list=tf.train.Int64List(value=value))
+
+
+def _float32_feature(value):
+    return tf.train.Feature(float_list=tf.train.FloatList(value=value))
 
 
 def write_to_bin(data_list, out_file):
@@ -92,7 +96,7 @@ def write_to_bin(data_list, out_file):
                                    'UserId': _int64_feature([example[0]]),
                                    'ItemId': _int64_feature([example[1]]),
                                    'time': _int64_feature([example[2]]),
-                                   'rating': _int64_feature([example[3]])}))
+                                   'rating': _float32_feature([example[3]])}))
         tf_example_str = example.SerializeToString()
         writer.write(tf_example_str)
     writer.close()
@@ -121,7 +125,7 @@ def write_days_to_bin(data_list, out_file):
                                        'UserId': _int64_feature([example[0]]),
                                        'ItemId': _int64_feature([example[1]]),
                                        'time': _int64_feature([example[2]]),
-                                       'rating': _int64_feature([example[3]])}))
+                                       'rating': _float32_feature([example[3]])}))
             tf_example_str = example.SerializeToString()
             writer.write(tf_example_str)
         writer.close()
@@ -129,9 +133,9 @@ def write_days_to_bin(data_list, out_file):
     names = [int(name) for name, examples in day_dict.items()]
     names = sorted(names)
 
-    with open(data_dir + out_file + 'filenames.txt', 'w') as writer:
+    with open(data_dir + out_file + '_filenames.txt', 'w') as writer:
         for name in names:
-            string_to_write = '\t'.join(['./data/days/' + out_file +
+            string_to_write = '\t'.join([data_dir + 'days/' + out_file +
                                         str(name) + '.tfrecords',
                                         str(number_dict[str(name)])])
             writer.write(string_to_write + '\n')
@@ -192,15 +196,14 @@ def av_error(train, val):
 print('Generatating data...')
 all_train_set = []
 all_train_list, ratings = gen_data(all_train_set)
-train_list, val_list, test_list, test = split_data(all_train_list, ratings)
-av_error(train_list, val_list)
-'''print('Writing to tfrecords...')
+train_list, val_list, test_list = split_data(all_train_list, ratings)
+# av_error(train_list, val_list)
+print('Writing to tfrecords...')
 write_to_bin(train_list, 'train_dataset')
 write_to_bin(val_list, 'val_dataset')
 write_to_bin(test_list, 'test_dataset')
-write_to_bin(test, 'all_test_dataset')
+
 print('Writing to day tfrecords...')
 write_days_to_bin(train_list, 'train_dataset')
 write_days_to_bin(val_list, 'val_dataset')
 write_days_to_bin(test_list, 'test_dataset')
-write_days_to_bin(test, 'all_test_dataset')'''
