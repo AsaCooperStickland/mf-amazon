@@ -81,6 +81,18 @@ def split_data(data_list, num_rating):
     return train_list, val_list, test_list, test
 
 
+def process_for_rnn(data_list):
+    labels = ['UserId', 'ItemId', 'time', 'rating', 'day']
+    data = pd.DataFrame.from_records(data_list, columns=labels)
+    new_list = []
+    for UserID, data_point in data.groupby('UserId'):
+        for day, day_data in data_point.groupby('day'):
+            item_list = day_data['ItemId'].tolist()
+            ratings_list = day_data['rating'].tolist()
+            new_list.append((UserID, item_list[: -1], ratings_list[: -1], item_list[-1], ratings_list[-1], day))
+    return new_list
+
+
 def _int64_feature(value):
     return tf.train.Feature(int64_list=tf.train.Int64List(value=value))
 
@@ -194,6 +206,7 @@ print('Generatating data...')
 all_train_set = []
 all_train_list, ratings = gen_data(all_train_set)
 train_list, val_list, test_list, test = split_data(all_train_list, ratings)
+process_for_rnn(train_list)
 av_error(train_list, val_list)
 '''print('Writing to tfrecords...')
 write_to_bin(train_list, 'train_dataset')
