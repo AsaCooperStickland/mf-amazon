@@ -168,7 +168,9 @@ it = tf.contrib.data.Iterator.from_string_handle(handle, train_dataset.output_ty
 
 init_train = train_dataset.make_one_shot_iterator()
 init_val = val_dataset.make_initializable_iterator()
-
+layers = 1
+rnn_size = 20
+u_state = [tf.placeholder(tf.float32, [None, rnn_size], name='rnn_state') for _ in range(layers)]
 u_idx, v_idx, time, r = it.get_next()
 RMSE, MAE, cost, summary_op, train_step_u, train_step_v = smf.build_graph(u_idx, v_idx, r)
   # get graph operations (ops)
