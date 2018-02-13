@@ -104,7 +104,7 @@ class SMF:
         #self.lr = tf.maximum(1e-5,tf.train.exponential_decay(self.learning_rate, self.global_step, self.decay_steps, self.decay, staircase=True))
         #self.build_graph()
 
-    def build_graph(self, u_idx, v_idx, r):
+    def build_graph(self, u_idx, v_idx, r, offset):
         #u_idx = tf.placeholder(tf.int32, [None])
         #v_idx = tf.placeholder(tf.int32, [None])
         #r = tf.placeholder(tf.float32, [None])
@@ -120,7 +120,7 @@ class SMF:
         self.V_bias_embed = tf.nn.embedding_lookup(self.V_bias, v_idx)
         self.r_hat = tf.reduce_sum(tf.multiply(self.U_embed, self.V_embed), reduction_indices=1)
         self.r_hat = tf.add(self.r_hat, self.U_bias_embed)
-        self.r_hat = tf.add(self.r_hat, self.V_bias_embed)
+        self.r_hat = tf.add(self.r_hat, self.V_bias_embed) + offset
 
         self.RMSE = tf.sqrt(tf.losses.mean_squared_error(r, self.r_hat))
         self.l2_loss = tf.nn.l2_loss(tf.subtract(r, self.r_hat))

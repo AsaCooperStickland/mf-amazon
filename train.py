@@ -23,18 +23,21 @@ dataset, batch_size, seed, epochs, logs_path, continue_from_epoch,\
 update_number = 20000
 
 if dataset == "ml1m":
+    offset = 3.5906066288375316
     num_users = 6040
     num_items = 3706
     num_ratings = 1000209
     data_dir = "./data/ml/"
     print("Using movie-lens 1M dataset.")
 
-if dataset == "amazon":
+elif dataset == "amazon":
+    offset = 4.240331172610
     num_users = 339231
     num_items = 83046
     num_ratings = 500176
     data_dir = "./data/"
     print("Using Amazon datset.")
+
 else:
     raise NameError("Unrecognized dataset!")
 
@@ -66,8 +69,9 @@ def val_check(sess, best_val_RMSE_loss):
                          feed_dict={handle: val_handle})
             total_val_MSE_loss += cost_val
             total_val_MAE_loss += mae_val
-            iter_out = "val_rmse: {}, val_mae: {}".format(total_val_MSE_loss / (batch_idx + 1),
-                                                          total_val_MAE_loss / (batch_idx + 1))
+            iter_out = "val_rmse: {}, val_mae: {} val num: {}".format(total_val_MSE_loss / (batch_idx + 1),
+                                                          total_val_MAE_loss / (batch_idx + 1),
+                                                          total_val_batches * batch_size)
             pbar_val.set_description(iter_out)
             pbar_val.update(1)
 
@@ -168,17 +172,15 @@ it = tf.contrib.data.Iterator.from_string_handle(handle, train_dataset.output_ty
 
 init_train = train_dataset.make_one_shot_iterator()
 init_val = val_dataset.make_initializable_iterator()
-layers = 1
-rnn_size = 20
-u_state = [tf.placeholder(tf.float32, [None, rnn_size], name='rnn_state') for _ in range(layers)]
+
 u_idx, v_idx, time, r = it.get_next()
-RMSE, MAE, cost, summary_op, train_step_u, train_step_v = smf.build_graph(u_idx, v_idx, r)
+RMSE, MAE, cost, summary_op, train_step_u, train_step_v, v_bias = smf.build_graph(u_idx, v_idx, r, offset)
   # get graph operations (ops)
 
 global_step = tf.Variable(0, name='global_step', trainable=False)
 val_saver = tf.train.Saver()
 
-train_size = int(0.8*num_ratings)
+train_size = int(0.9*num_ratings)
 val_size = int(0.5*(num_ratings - train_size))
 
 if day_split:
