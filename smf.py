@@ -7,7 +7,7 @@ def weight_variable(shape, name):
 
 
 def bias_variable(shape, name):
-    b_init = tf.constant_initializer(0.)
+    b_init = tf.constant_initializer(4.238)
     return tf.get_variable(name, shape, initializer=b_init)
 
 
@@ -63,7 +63,8 @@ class BaseSMF:
         #self.r_hat = tf.add(self.r_hat, self.V_bias_embed)
 
         self.RMSE = tf.sqrt(tf.losses.mean_squared_error(r, self.r_hat))
-        self.l2_loss = tf.nn.l2_loss(tf.subtract(r, self.r_hat))
+        # times 2 since tf divides by 2
+        self.l2_loss = 2. * tf.nn.l2_loss(tf.subtract(r, self.r_hat))
         self.MAE = tf.reduce_mean(tf.abs(tf.subtract(r, self.r_hat)))
         #self.reg = tf.add(tf.multiply(self.reg_lambda, tf.nn.l2_loss(self.U)), tf.multiply(self.reg_lambda, tf.nn.l2_loss(self.V)))
         self.reg_loss = self.l2_loss

@@ -66,8 +66,9 @@ def val_check(sess, best_val_RMSE_loss):
                          feed_dict={handle: val_handle})
             total_val_MSE_loss += cost_val
             total_val_MAE_loss += mae_val
-            iter_out = "val_rmse: {}, val_mae: {}".format(total_val_MSE_loss / (batch_idx + 1),
-                                                          total_val_MAE_loss / (batch_idx + 1))
+            iter_out = "val_rmse: {}, val_mae: {} val num: {}".format(total_val_MSE_loss / (batch_idx + 1),
+                                                          total_val_MAE_loss / (batch_idx + 1),
+                                                          total_val_batches * batch_size)
             pbar_val.set_description(iter_out)
             pbar_val.update(1)
 
@@ -129,7 +130,7 @@ rotate_data = tf.placeholder(tf.bool, name='rotate-flag')
 dropout_rate = tf.placeholder(tf.float32, name='dropout-prob')
 '''
 #with tf.Graph().as_default():
-smf = SMF(num_users, num_items, latent_dim, learning_rate=learning_rate,
+smf = BaseSMF(num_users, num_items, latent_dim, learning_rate=learning_rate,
           batch_size=256, reg_lambda=l2_weight)
 
 if continue_from_epoch == -1:  # if this is a new experiment and not

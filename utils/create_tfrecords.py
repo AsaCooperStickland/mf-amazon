@@ -180,6 +180,7 @@ def av_error(train, val):
             MSE_item_av += (mean_rating - rating)**2
             new_items += 1
         MSE_rating_av += (mean_rating - rating)**2
+    print('Val number {}'.format(len(val)))
     MSE_user_av /= len(val)
     MSE_item_av /= len(val)
     MSE_rating_av /= len(val)
