@@ -66,18 +66,9 @@ def gen_data(data_list):
 
 def split_data(data_list, num_rating):
     data_list = sorted(data_list, key=get_key)
-    '''for i, ex in enumerate(data_list):
-        if i % 10000 == 0:
-            time = ex[2]
-            print(i)
-            print(time)
-            print(time // 3600 // 24 // 365 - 28 + 1997)'''
-
-    train_list = data_list[:int(0.8*num_rating)]
-    test = data_list[int(0.8*num_rating):]
-    random.shuffle(test)
+    train_list = data_list[:int(0.9*num_rating)]
+    test = data_list[int(0.9*num_rating):]
     val_list, test_list = test[:int(0.5*len(test))], test[int(0.5*len(test)):]
-    val_list, test_list = sorted(val_list, key=get_key), sorted(test_list, key=get_key)
     return train_list, val_list, test_list, test
 
 
@@ -195,12 +186,12 @@ all_train_set = []
 all_train_list, ratings = gen_data(all_train_set)
 train_list, val_list, test_list, test = split_data(all_train_list, ratings)
 av_error(train_list, val_list)
-'''print('Writing to tfrecords...')
+print('Writing to tfrecords...')
 write_to_bin(train_list, 'train_dataset')
 write_to_bin(val_list, 'val_dataset')
 write_to_bin(test_list, 'test_dataset')
 write_to_bin(test, 'all_test_dataset')
-print('Writing to day tfrecords...')
+'''print('Writing to day tfrecords...')
 write_days_to_bin(train_list, 'train_dataset')
 write_days_to_bin(val_list, 'val_dataset')
 write_days_to_bin(test_list, 'test_dataset')

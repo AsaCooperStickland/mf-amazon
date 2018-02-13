@@ -23,18 +23,21 @@ dataset, batch_size, seed, epochs, logs_path, continue_from_epoch,\
 update_number = 20000
 
 if dataset == "ml1m":
+    offset = 3.5906066288375316
     num_users = 6040
     num_items = 3706
     num_ratings = 1000209
     data_dir = "./data/ml/"
     print("Using movie-lens 1M dataset.")
 
-if dataset == "amazon":
+elif dataset == "amazon":
+    offset = 4.240331172610
     num_users = 339231
     num_items = 83046
     num_ratings = 500176
     data_dir = "./data/"
     print("Using Amazon datset.")
+
 else:
     raise NameError("Unrecognized dataset!")
 
@@ -130,7 +133,7 @@ rotate_data = tf.placeholder(tf.bool, name='rotate-flag')
 dropout_rate = tf.placeholder(tf.float32, name='dropout-prob')
 '''
 #with tf.Graph().as_default():
-smf = BaseSMF(num_users, num_items, latent_dim, learning_rate=learning_rate,
+smf = SMF(num_users, num_items, latent_dim, learning_rate=learning_rate,
           batch_size=256, reg_lambda=l2_weight)
 
 if continue_from_epoch == -1:  # if this is a new experiment and not
@@ -171,13 +174,13 @@ init_train = train_dataset.make_one_shot_iterator()
 init_val = val_dataset.make_initializable_iterator()
 
 u_idx, v_idx, time, r = it.get_next()
-RMSE, MAE, cost, summary_op, train_step_u = smf.build_graph(u_idx, v_idx, r)
+RMSE, MAE, cost, summary_op, train_step_u, train_step_v, v_bias = smf.build_graph(u_idx, v_idx, r, offset)
   # get graph operations (ops)
 
 global_step = tf.Variable(0, name='global_step', trainable=False)
 val_saver = tf.train.Saver()
 
-train_size = int(0.8*num_ratings)
+train_size = int(0.9*num_ratings)
 val_size = int(0.5*(num_ratings - train_size))
 
 if day_split:
@@ -218,8 +221,8 @@ with tf.Session() as sess:
             with tqdm.tqdm(total=total_train_batches) as pbar_train:
                 for batch_idx in range(total_train_batches):
                     iter_id = e * total_train_batches + batch_idx
-                    rmse_train, mae_train, cost_train, summary_str, u_update =\
-                        sess.run([RMSE, MAE, cost, summary_op, train_step_u],
+                    rmse_train, mae_train, cost_train, summary_str, u_update, v_update =\
+                        sess.run([RMSE, MAE, cost, summary_op, train_step_u, train_step_v],
                         feed_dict={handle: training_handle})
                     # Here we execute u_update, v_update which train the network and also the ops that compute
                     # rmse and mae.
