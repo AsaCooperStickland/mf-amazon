@@ -90,7 +90,45 @@ def process_for_rnn(data_list):
             item_list = day_data['ItemId'].tolist()
             ratings_list = day_data['rating'].tolist()
             new_list.append((UserID, item_list[: -1], ratings_list[: -1], item_list[-1], ratings_list[-1], day))
-    return new_list
+    return new_lists
+
+
+def write_to_pd(data_list, out_file):
+    """Reads the tokenized .story files corresponding to the urls listed in the url_file and writes them to a out_file."""
+    day_dict = {}
+    number_dict = {}
+    for example in data_list:
+        day = str(example[4])
+        if day not in day_dict:
+            day_dict[day] = [example[:4]]
+        else:
+            day_dict[day].append(example[:4])
+        if day not in number_dict:
+            number_dict[day] = 1
+        else:
+            number_dict[day] += 1
+    for day, examples in day_dict.items():
+        writer = tf.python_io.TFRecordWriter(data_dir + 'days/' + day + '.tfrecords')
+        for idx, example in enumerate(examples):
+            example = tf.train.Example(features=tf.train.Features(feature={
+                                       'UserId': _int64_feature([example[0]]),
+                                       'ItemId': _int64_feature([example[1]]),
+                                       'time': _int64_feature([example[2]]),
+                                       'rating': _int64_feature([example[3]])}))
+            tf_example_str = example.SerializeToString()
+            writer.write(tf_example_str)
+        writer.close()
+        sys.stdout.flush()
+    names = [int(name) for name, examples in day_dict.items()]
+    names = sorted(names)
+
+    with open(data_dir + out_file + '_filenames.txt', 'w') as writer:
+        for name in names:
+            string_to_write = '\t'.join([data_dir + 'days/' + out_file +
+                                        str(name) + '.tfrecords',
+                                        str(number_dict[str(name)])])
+            writer.write(string_to_write + '\n')
+    print("Finished writing files %s\n" % out_file)
 
 
 def _int64_feature(value):
