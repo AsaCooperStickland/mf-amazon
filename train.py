@@ -170,7 +170,7 @@ init_train = train_dataset.make_one_shot_iterator()
 init_val = val_dataset.make_initializable_iterator()
 
 u_idx, v_idx, time, r = it.get_next()
-RMSE, MAE, cost, summary_op, train_step_u, train_step_v = smf.build_graph(u_idx, v_idx, r)
+RMSE, MAE, cost, summary_op, train_step_u = smf.build_graph(u_idx, v_idx, r)
   # get graph operations (ops)
 
 global_step = tf.Variable(0, name='global_step', trainable=False)
@@ -217,8 +217,8 @@ with tf.Session() as sess:
             with tqdm.tqdm(total=total_train_batches) as pbar_train:
                 for batch_idx in range(total_train_batches):
                     iter_id = e * total_train_batches + batch_idx
-                    rmse_train, mae_train, cost_train, summary_str, u_update, v_update =\
-                        sess.run([RMSE, MAE, cost, summary_op, train_step_u, train_step_v],
+                    rmse_train, mae_train, cost_train, summary_str, u_update =\
+                        sess.run([RMSE, MAE, cost, summary_op, train_step_u],
                         feed_dict={handle: training_handle})
                     # Here we execute u_update, v_update which train the network and also the ops that compute
                     # rmse and mae.

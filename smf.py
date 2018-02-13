@@ -55,7 +55,7 @@ class BaseSMF:
         #v_idx = tf.placeholder(tf.int32, [None])
         #r = tf.placeholder(tf.float32, [None])
 
-        self.U_bias = weight_variable([self.num_users], 'U_bias')
+        self.U_bias = bias_variable([self.num_users], 'U_bias')
 
         self.U_bias_embed = tf.nn.embedding_lookup(self.U_bias, u_idx)
         #self.V_bias_embed = tf.nn.embedding_lookup(self.V_bias, v_idx)
@@ -118,74 +118,6 @@ class SMF:
         self.V_embed = tf.nn.embedding_lookup(self.V, v_idx)
         self.U_bias_embed = tf.nn.embedding_lookup(self.U_bias, u_idx)
         self.V_bias_embed = tf.nn.embedding_lookup(self.V_bias, v_idx)
-        self.r_hat = tf.reduce_sum(tf.multiply(self.U_embed, self.V_embed), reduction_indices=1)
-        self.r_hat = tf.add(self.r_hat, self.U_bias_embed)
-        self.r_hat = tf.add(self.r_hat, self.V_bias_embed)
-
-        self.RMSE = tf.sqrt(tf.losses.mean_squared_error(r, self.r_hat))
-        self.l2_loss = tf.nn.l2_loss(tf.subtract(r, self.r_hat))
-        self.MAE = tf.reduce_mean(tf.abs(tf.subtract(r, self.r_hat)))
-        self.reg = tf.add(tf.multiply(self.reg_lambda, tf.nn.l2_loss(self.U)), tf.multiply(self.reg_lambda, tf.nn.l2_loss(self.V)))
-        self.reg_loss = tf.add(self.l2_loss, self.reg)
-
-        self.optimizer = tf.train.AdamOptimizer(self.learning_rate)
-        # self.train_step = self.optimizer.minimize(self.reg_loss)
-        update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)  # Needed for correct batch norm usage
-        with tf.control_dependencies(update_ops):
-            self.train_step_u = self.optimizer.minimize(self.reg_loss,
-                                                        var_list=[self.U, self.U_bias],
-                                                        colocate_gradients_with_ops=True)
-            self.train_step_v = self.optimizer.minimize(self.reg_loss,
-                                                        var_list=[self.V, self.V_bias],
-                                                        colocate_gradients_with_ops=True)
-
-        tf.summary.scalar("RMSE", self.RMSE)
-        tf.summary.scalar("MAE", self.MAE)
-        tf.summary.scalar("L2-Loss", self.l2_loss)
-        tf.summary.scalar("Reg-Loss", self.reg_loss)
-
-        # add op for merging summary
-        self.summary_op = tf.summary.merge_all()
-
-        # add Saver ops
-        self.saver = tf.train.Saver()
-
-        return self.RMSE, self.MAE, self.l2_loss, self.summary_op,\
-            self.train_step_u, self.train_step_v, self.V_bias
-
-
-class RNNSMF:
-    def __init__(self, num_users, num_items, latent_dim, rnn_dim = 20,
-                 learning_rate=0.001, batch_size=256, reg_lambda=0.01):
-        self.num_users = num_users
-        self.num_items = num_items
-        self.latent_dim = latent_dim
-        self.rnn_dim = rnn_dim
-        self.learning_rate = learning_rate
-        self.batch_size = batch_size
-        self.reg_lambda = tf.constant(reg_lambda, dtype=tf.float32)
-        #self.lr = tf.maximum(1e-5,tf.train.exponential_decay(self.learning_rate, self.global_step, self.decay_steps, self.decay, staircase=True))
-        #self.build_graph()
-
-    def build_graph(self, u_idx, v_idx, r):
-
-        self.U_t = weight_variable([self.num_users, self.rnn_dim], 'U')
-        # Should this be items * rnn_dim not users * rnn_dim???
-
-        self.U = weight_variable([self.num_users, self.latent_dim], 'U')
-        self.V = weight_variable([self.num_items, self.latent_dim], 'V')
-        self.U_bias = weight_variable([self.num_users], 'U_bias')
-        self.V_bias = weight_variable([self.num_items], 'V_bias')
-
-        self.U_t_embed = tf.nn.embedding_lookup(self.U_t, u_idx)
-        self.U_embed = tf.nn.embedding_lookup(self.U, u_idx)
-        self.V_embed = tf.nn.embedding_lookup(self.V, v_idx)
-        self.U_bias_embed = tf.nn.embedding_lookup(self.U_bias, u_idx)
-        self.V_bias_embed = tf.nn.embedding_lookup(self.V_bias, v_idx)
-
-        with tf.name_scope("rnn"):
-
-
         self.r_hat = tf.reduce_sum(tf.multiply(self.U_embed, self.V_embed), reduction_indices=1)
         self.r_hat = tf.add(self.r_hat, self.U_bias_embed)
         self.r_hat = tf.add(self.r_hat, self.V_bias_embed)
