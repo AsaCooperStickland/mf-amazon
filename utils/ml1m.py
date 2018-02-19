@@ -73,11 +73,9 @@ def split_data(data_list, num_rating):
             print(time)
             print(time // 3600 // 24 // 365 - 28 + 1997)'''
 
-    train_list = data_list[:int(0.8*num_rating)]
-    test = data_list[int(0.8*num_rating):]
-    random.shuffle(test)
+    train_list = data_list[:int(0.9*num_rating)]
+    test = data_list[int(0.9*num_rating):]
     val_list, test_list = test[:int(0.5*len(test))], test[int(0.5*len(test)):]
-    val_list, test_list = sorted(val_list, key=get_key), sorted(test_list, key=get_key)
     return train_list, val_list, test_list, test
 
 
@@ -89,45 +87,26 @@ def process_for_rnn(data_list):
         for day, day_data in data_point.groupby('day'):
             item_list = day_data['ItemId'].tolist()
             ratings_list = day_data['rating'].tolist()
-            new_list.append((UserID, item_list[: -1], ratings_list[: -1], item_list[-1], ratings_list[-1], day))
-    return new_lists
+            for i in range(len(item_list)):
+                new_list.append((UserID, item_list[:i], ratings_list[:i], item_list[i], ratings_list[i], day))
+    return new_list
 
 
 def write_to_pd(data_list, out_file):
     """Reads the tokenized .story files corresponding to the urls listed in the url_file and writes them to a out_file."""
-    day_dict = {}
-    number_dict = {}
-    for example in data_list:
-        day = str(example[4])
-        if day not in day_dict:
-            day_dict[day] = [example[:4]]
-        else:
-            day_dict[day].append(example[:4])
-        if day not in number_dict:
-            number_dict[day] = 1
-        else:
-            number_dict[day] += 1
-    for day, examples in day_dict.items():
-        writer = tf.python_io.TFRecordWriter(data_dir + 'days/' + day + '.tfrecords')
-        for idx, example in enumerate(examples):
-            example = tf.train.Example(features=tf.train.Features(feature={
-                                       'UserId': _int64_feature([example[0]]),
-                                       'ItemId': _int64_feature([example[1]]),
-                                       'time': _int64_feature([example[2]]),
-                                       'rating': _int64_feature([example[3]])}))
-            tf_example_str = example.SerializeToString()
-            writer.write(tf_example_str)
-        writer.close()
-        sys.stdout.flush()
-    names = [int(name) for name, examples in day_dict.items()]
-    names = sorted(names)
+    labels = ['UserId', 'ItemList', 'RatingList', 'item', 'rating', 'day']
+    data = pd.DataFrame.from_records(data_list, columns=labels)
 
-    with open(data_dir + out_file + '_filenames.txt', 'w') as writer:
-        for name in names:
-            string_to_write = '\t'.join([data_dir + 'days/' + out_file +
-                                        str(name) + '.tfrecords',
-                                        str(number_dict[str(name)])])
-            writer.write(string_to_write + '\n')
+    with open(data_dir + out_file + '.pkl', 'wb') as f:
+        pickle.dump(data, f)
+    print("Finished writing files %s\n" % out_file)
+
+
+def write_to_list(data_list, out_file):
+    """Reads the tokenized .story files corresponding to the urls listed in the url_file and writes them to a out_file."""
+
+    with open(data_dir + out_file + '.pkl', 'wb') as f:
+        pickle.dump(data_list, f)
     print("Finished writing files %s\n" % out_file)
 
 
@@ -244,8 +223,16 @@ print('Generatating data...')
 all_train_set = []
 all_train_list, ratings = gen_data(all_train_set)
 train_list, val_list, test_list, test = split_data(all_train_list, ratings)
-process_for_rnn(train_list)
 av_error(train_list, val_list)
+rnn_train_list = process_for_rnn(train_list)
+rnn_val_list = process_for_rnn(val_list)
+rnn_test_list = process_for_rnn(test_list)
+rnn_test = process_for_rnn(test)
+print('Writing to list...')
+'''write_to_list(rnn_train_list, 'train_dataset')
+write_to_list(rnn_val_list, 'val_dataset')
+write_to_list(rnn_test_list, 'test_dataset')
+write_to_list(rnn_test, 'all_test_dataset')'''
 '''print('Writing to tfrecords...')
 write_to_bin(train_list, 'train_dataset')
 write_to_bin(val_list, 'val_dataset')

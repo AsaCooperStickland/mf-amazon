@@ -4,6 +4,7 @@ class ParserClass(object):
         Parses arguments and saves them in the Parser Class
         :param parser: A parser to get input from
         """
+        parser.add_argument('--rnn', nargs="?", type=str, default="False", help='wheter to use RNN')
         parser.add_argument('--dataset', nargs="?", type=str, default="amazon", help='dataset to use')
         parser.add_argument('--batch_size', nargs="?", type=int, default=256, help='batch_size for experiment')
         parser.add_argument('--epochs', type=int, nargs="?", default=4, help='Number of epochs to train for')
@@ -31,6 +32,7 @@ class ParserClass(object):
         Processes the parsed arguments and produces variables of specific types needed for the experiments
         :return: Arguments needed for experiments
         """
+        rnn = True if self.args.rnn == "True" else False
         dataset = self.args.dataset
         batch_size = self.args.batch_size
         experiment_prefix = self.args.experiment_prefix
@@ -45,6 +47,6 @@ class ParserClass(object):
         learning_rate = self.args.learning_rate
         train_fraction = self.args.train_fraction
 
-        return dataset, batch_size, seed, epochs, logs_path, continue_from_epoch,\
+        return rnn, dataset, batch_size, seed, epochs, logs_path, continue_from_epoch,\
             tensorboard_enable, experiment_prefix, day_split, l2_weight,\
             latent_dim, learning_rate, train_fraction
