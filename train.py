@@ -3,19 +3,21 @@ import os
 
 import argparse
 import tqdm
+import pickle
 import numpy as np
 import tensorflow as tf
 from utils.parser_utils import ParserClass
 from utils.storage import build_experiment_folder, save_statistics
 from sklearn.model_selection import KFold
 
-from smf import SMF, BaseSMF
+from input_data import DataInput, DataInputTest
+from smf import RNNSMF, SMF, BaseSMF
 
 tf.reset_default_graph()  # resets any previous graphs to clear memory
 parser = argparse.ArgumentParser(description='Welcome to MF experiments script')  # generates an argument parser
 parser_extractor = ParserClass(parser=parser)  # creates a parser class to process the parsed input
 
-dataset, batch_size, seed, epochs, logs_path, continue_from_epoch,\
+rnn, dataset, batch_size, seed, epochs, logs_path, continue_from_epoch,\
     tensorboard_enable, experiment_prefix, day_split, l2_weight, latent_dim,\
     learning_rate, train_fraction = parser_extractor.get_argument_variables()
 
@@ -42,7 +44,8 @@ else:
     raise NameError("Unrecognized dataset!")
 
 
-experiment_name = "experiment_{}_batch_size_{}_l2_{}_dim_{}_frac_{}_lr_{}".format(experiment_prefix,
+experiment_name = "rnn_{}_experiment_{}_batch_size_{}_l2_{}_dim_{}_frac_{}_lr_{}".format(rnn,
+                                                                   experiment_prefix,
                                                                    batch_size, l2_weight,
                                                                    latent_dim, train_fraction,
                                                                    learning_rate)
@@ -61,12 +64,10 @@ saved_models_filepath, logs_filepath = build_experiment_folder(experiment_name, 
 def val_check(sess, best_val_RMSE_loss):
     total_val_MSE_loss = 0.
     total_val_MAE_loss = 0.
-    sess.run(init_val.initializer)
     with tqdm.tqdm(total=total_val_batches) as pbar_val:
-        for batch_idx in range(total_val_batches):
-            mae_val, cost_val, summary_str =\
-                sess.run([MAE, cost, summary_op],
-                         feed_dict={handle: val_handle})
+        for batch_idx, data in DataInput(val_data, batch_size):
+            iter_id = e * total_train_batches + batch_idx
+            rmse, mae_val, cost_val, summary_op = smf.eval(sess, data)
             total_val_MSE_loss += cost_val
             total_val_MAE_loss += mae_val
             iter_out = "val_rmse: {}, val_mae: {} val num: {}".format(total_val_MSE_loss / (batch_idx + 1),
@@ -74,8 +75,8 @@ def val_check(sess, best_val_RMSE_loss):
                                                           total_val_batches * batch_size)
             pbar_val.set_description(iter_out)
             pbar_val.update(1)
-
-    total_val_MSE_loss /= (total_val_batches * batch_size)
+    val_size
+    total_val_MSE_loss /= val_size
     total_val_RMSE_loss = total_val_MSE_loss**0.5
     total_val_MAE_loss /= total_val_batches
 
@@ -96,45 +97,13 @@ def val_check(sess, best_val_RMSE_loss):
                      -1, -1])
     return best_val_RMSE_loss
 
-
-
-def decode(serialized_example):
-    features = tf.parse_single_example(
-                          serialized_example,
-                          features={
-                          'UserId': tf.FixedLenFeature([], tf.int64),
-                          'ItemId': tf.FixedLenFeature([], tf.int64),
-                          'time': tf.FixedLenFeature([], tf.int64),
-                          'rating': tf.FixedLenFeature([], tf.int64)})
-
-    # Convert label from a scalar uint8 tensor to an int32 scalar.
-    UserId = tf.cast(features['UserId'], tf.int64)
-    ItemId = tf.cast(features['ItemId'], tf.int64)
-    time = tf.cast(features['time'], tf.float32)
-    rating = tf.cast(features['rating'], tf.float32)
-    return UserId, ItemId, time, rating
-
-
-def create_dataset(filename):
-    dataset = tf.contrib.data.TFRecordDataset(filename)
-    dataset = dataset.map(decode)
-    dataset = dataset.repeat(epochs)
-    dataset = dataset.batch(batch_size)
-    return dataset
-
-'''
-# Placeholder setup
-data_inputs = tf.placeholder(tf.float32, [batch_size, train_data.inputs.shape[1], train_data.inputs.shape[2],
-                                          train_data.inputs.shape[3]], 'data-inputs')
-data_targets = tf.placeholder(tf.int32, [batch_size], 'data-targets')
-
-training_phase = tf.placeholder(tf.bool, name='training-flag')
-rotate_data = tf.placeholder(tf.bool, name='rotate-flag')
-dropout_rate = tf.placeholder(tf.float32, name='dropout-prob')
-'''
-#with tf.Graph().as_default():
-smf = SMF(num_users, num_items, latent_dim, learning_rate=learning_rate,
-          batch_size=256, reg_lambda=l2_weight)
+if rnn:
+    smf = RNNSMF(num_users, num_items, latent_dim, learning_rate=learning_rate,
+             reg_lambda=l2_weight)
+else:
+    smf = SMF(num_users, num_items, latent_dim, learning_rate=learning_rate,
+             reg_lambda=l2_weight)
+smf.build_graph(offset)
 
 if continue_from_epoch == -1:  # if this is a new experiment and not
     # continuation of a previous one then generate a new
@@ -162,8 +131,8 @@ if day_split:
         train_examples = sum(example_counter)
         print('loading {} examples'.format(train_examples))
 else:
-    filenames = data_dir + 'train_dataset.tfrecords'
     print('loading all examples')
+<<<<<<< HEAD
 
 train_dataset = create_dataset(filenames)
 val_dataset = create_dataset(data_dir + 'val_dataset.tfrecords')
@@ -176,6 +145,12 @@ init_val = val_dataset.make_initializable_iterator()
 u_idx, v_idx, time, r = it.get_next()
 RMSE, MAE, cost, summary_op, train_step_u, train_step_v, v_bias = smf.build_graph(u_idx, v_idx, r, offset)
   # get graph operations (ops)
+=======
+    with open(data_dir + 'train_dataset.pkl', 'rb') as f:
+        train_data = pickle.load(f)
+    with open(data_dir + 'val_dataset.pkl', 'rb') as f:
+        val_data = pickle.load(f)
+>>>>>>> 98b0610b2b9d4fe4ffb470fc28443e3555965971
 
 global_step = tf.Variable(0, name='global_step', trainable=False)
 val_saver = tf.train.Saver()
@@ -190,6 +165,8 @@ else:
     total_train_batches = int(train_size/batch_size)
     print('Using {} examples out of total {}'.format(train_size, train_size))
 total_val_batches = int(val_size/batch_size)
+print('val size', val_size)
+print('divide', (total_val_batches * batch_size))
 #total_test_batches = = int(int(0.8*num_ratings)/batch_size)
 
 best_epoch = 0
@@ -201,8 +178,8 @@ if tensorboard_enable:
 init_op = tf.group(tf.global_variables_initializer(),
                    tf.local_variables_initializer())  # initialization op for the graph
 with tf.Session() as sess:
-    training_handle = sess.run(init_train.string_handle())
-    val_handle = sess.run(init_val.string_handle())
+    #training_handle = sess.run(init_train.string_handle())
+    #val_handle = sess.run(init_val.string_handle())
     sess.run(init_op) # actually running the initialization op
     train_saver = tf.train.Saver()  # saver object that will save our graph so we can reload it later
     val_saver = tf.train.Saver()
@@ -219,11 +196,9 @@ with tf.Session() as sess:
             total_RMSE_loss = 0.
             total_MAE_loss = 0.
             with tqdm.tqdm(total=total_train_batches) as pbar_train:
-                for batch_idx in range(total_train_batches):
+                for batch_idx, data in DataInput(train_data, batch_size):
                     iter_id = e * total_train_batches + batch_idx
-                    rmse_train, mae_train, cost_train, summary_str, u_update, v_update =\
-                        sess.run([RMSE, MAE, cost, summary_op, train_step_u, train_step_v],
-                        feed_dict={handle: training_handle})
+                    rmse_train, mae_train, cost, summary_op = smf.train(sess, data)
                     # Here we execute u_update, v_update which train the network and also the ops that compute
                     # rmse and mae.
                     total_RMSE_loss += rmse_train
