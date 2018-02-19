@@ -260,8 +260,20 @@ class RNNSMF:
         concat_emb = tf.concat([self.i_hist_emb, self.r_hist_emb], 2)
         with tf.name_scope("rnn"):
 
-            cell_fw = build_cell(2 * self.rnn_dim)
-            cell_bw = build_cell(2 * self.rnn_dim)
+            cell_fw = tf.contrib.rnn.DropoutWrapper(build_cell(2 * self.rnn_dim),
+                                                    variational_recurrent=True,
+                                                    input_keep_prob=0.8,
+                                                    output_keep_prob=0.8,
+                                                    state_keep_prob=0.95,
+                                                    input_size=(2 * self.rnn_dim),
+                                                    dtype=tf.float32)
+            cell_bw = tf.contrib.rnn.DropoutWrapper(build_cell(2 * self.rnn_dim),
+                                                    variational_recurrent=True,
+                                                    input_keep_prob=0.8,
+                                                    output_keep_prob=0.8,
+                                                    state_keep_prob=0.95,
+                                                    input_size=(2 * self.rnn_dim),
+                                                    dtype=tf.float32)
             rnn_output, _ = tf.nn.bidirectional_dynamic_rnn(cell_fw, cell_bw,
                                                             concat_emb, self.sl,
                                                             dtype=tf.float32)
