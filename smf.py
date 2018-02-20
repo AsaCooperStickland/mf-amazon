@@ -154,7 +154,7 @@ class SMF:
         self.reg = tf.add(tf.multiply(self.reg_lambda, tf.nn.l2_loss(self.U)), tf.multiply(self.reg_lambda, tf.nn.l2_loss(self.V)))
         self.reg_loss = tf.add(self.cost, self.reg)
 
-        self.optimizer = tf.train.AdamOptimizer(self.learning_rate)
+        self.optimizer = tf.train.GradientDescentOptimizer(self.learning_rate)
         # self.train_step = self.optimizer.minimize(self.reg_loss)
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)  # Needed for correct batch norm usage
         with tf.control_dependencies(update_ops):
@@ -205,7 +205,7 @@ class SMF:
 class RNNSMF:
     def __init__(self, num_users, num_items, latent_dim,
                  learning_rate=0.001, reg_lambda=0.01,
-                 dropout_p_hidden=0.8, rnn_dim=5):
+                 dropout_p_hidden=0.8, rnn_dim=10):
         self.num_users = num_users
         self.num_items = num_items
         self.latent_dim = latent_dim
@@ -262,15 +262,15 @@ class RNNSMF:
 
             cell_fw = tf.contrib.rnn.DropoutWrapper(build_cell(2 * self.rnn_dim),
                                                     variational_recurrent=True,
-                                                    input_keep_prob=0.8,
-                                                    output_keep_prob=0.8,
+                                                    input_keep_prob=0.95,
+                                                    output_keep_prob=0.95,
                                                     state_keep_prob=0.95,
                                                     input_size=(2 * self.rnn_dim),
                                                     dtype=tf.float32)
             cell_bw = tf.contrib.rnn.DropoutWrapper(build_cell(2 * self.rnn_dim),
                                                     variational_recurrent=True,
-                                                    input_keep_prob=0.8,
-                                                    output_keep_prob=0.8,
+                                                    input_keep_prob=0.95,
+                                                    output_keep_prob=0.95,
                                                     state_keep_prob=0.95,
                                                     input_size=(2 * self.rnn_dim),
                                                     dtype=tf.float32)

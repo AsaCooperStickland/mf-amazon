@@ -7,7 +7,7 @@ class ParserClass(object):
         parser.add_argument('--rnn', nargs="?", type=str, default="False", help='wheter to use RNN')
         parser.add_argument('--dataset', nargs="?", type=str, default="amazon", help='dataset to use')
         parser.add_argument('--batch_size', nargs="?", type=int, default=256, help='batch_size for experiment')
-        parser.add_argument('--epochs', type=int, nargs="?", default=4, help='Number of epochs to train for')
+        parser.add_argument('--epochs', type=int, nargs="?", default=15, help='Number of epochs to train for')
         parser.add_argument('--logs_path', type=str, nargs="?", default="logs/",
                             help='Experiment log path, '
                                  'where tensorboard is saved, '

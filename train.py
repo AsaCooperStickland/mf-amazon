@@ -29,7 +29,7 @@ if dataset == "ml1m":
     num_users = 6040
     num_items = 3706
     num_ratings = 1000209
-    data_dir = "./data/ml/"
+    data_dir = "/home/s1302760/mf-amazon/data/ml/"
     print("Using movie-lens 1M dataset.")
 
 elif dataset == "amazon":
@@ -37,7 +37,7 @@ elif dataset == "amazon":
     num_users = 339231
     num_items = 83046
     num_ratings = 500176
-    data_dir = "./data/"
+    data_dir = "/home/s1302760/mf-amazon/data/"
     print("Using Amazon datset.")
 
 else:
