@@ -30,6 +30,13 @@ def extract_axis_1(data, ind):
     return res
 
 
+def extract_axis_1_vanilla(data, ind):
+    batch_range = tf.range(tf.shape(data)[0])
+    indices = tf.stack([batch_range, ind], axis=1)
+    res = tf.gather_nd(data, indices)
+    return res
+
+
 def build_cell(hidden_units, depth=1):
     cell_list = [build_single_cell(hidden_units) for i in range(depth)]
     return MultiRNNCell(cell_list)
@@ -137,8 +144,8 @@ class SMF:
 
         self.U = weight_variable([self.num_users, self.latent_dim], 'U')
         self.V = weight_variable([self.num_items, self.latent_dim], 'V')
-        self.U_bias = weight_variable([self.num_users], 'U_bias')
-        self.V_bias = weight_variable([self.num_items], 'V_bias')
+        self.U_bias = bias_variable([self.num_users], 'U_bias')
+        self.V_bias = bias_variable([self.num_items], 'V_bias')
 
         self.U_embed = tf.nn.embedding_lookup(self.U, self.u_idx)
         self.V_embed = tf.nn.embedding_lookup(self.V, self.i_idx)
@@ -234,8 +241,8 @@ class RNNSMF:
 
         self.U = weight_variable([self.num_users, self.latent_dim], 'U')
         self.V = weight_variable([self.num_items, self.latent_dim], 'V')
-        self.U_bias = weight_variable([self.num_users], 'U_bias')
-        self.V_bias = weight_variable([self.num_items], 'V_bias')
+        self.U_bias = bias_variable([self.num_users], 'U_bias')
+        self.V_bias = bias_variable([self.num_items], 'V_bias')
 
         self.U_W = weight_variable([self.num_items, self.rnn_dim], 'U_W')
         self.R_W = weight_variable([5, self.rnn_dim], 'R_W')
@@ -246,7 +253,7 @@ class RNNSMF:
         self.V_bias_embed = tf.nn.embedding_lookup(self.V_bias, self.i_idx)
         self.i_hist_emb = tf.nn.embedding_lookup(self.U_W, self.i_hist)
         self.r_hist_emb = tf.nn.embedding_lookup(self.R_W, self.r_hist)
-
+        '''
         self.U_final = weight_variable([self.num_users, 2 * self.rnn_dim * self.latent_dim], 'U_final')
         self.U_final_bias = weight_variable([self.num_items, self.latent_dim], 'U_final_bias')
 
@@ -256,7 +263,11 @@ class RNNSMF:
 
         self.V_t = weight_variable([self.num_items, self.latent_dim], 'V_t')
         self.V_t_embed = tf.nn.embedding_lookup(self.V_t, self.i_idx)
+        '''
+        self.U_final = weight_variable([2 * self.rnn_dim, self.latent_dim], 'U_final')
+        self.U_final_bias = bias_variable([self.latent_dim], 'U_final_bias')
 
+        self.V_t = weight_variable([self.latent_dim], 'V_t')
         concat_emb = tf.concat([self.i_hist_emb, self.r_hist_emb], 2)
         with tf.name_scope("rnn"):
 
@@ -267,24 +278,26 @@ class RNNSMF:
                                                     state_keep_prob=0.95,
                                                     input_size=(2 * self.rnn_dim),
                                                     dtype=tf.float32)
-            cell_bw = tf.contrib.rnn.DropoutWrapper(build_cell(2 * self.rnn_dim),
+            '''cell_bw = tf.contrib.rnn.DropoutWrapper(build_cell(2 * self.rnn_dim),
                                                     variational_recurrent=True,
                                                     input_keep_prob=0.95,
                                                     output_keep_prob=0.95,
                                                     state_keep_prob=0.95,
                                                     input_size=(2 * self.rnn_dim),
-                                                    dtype=tf.float32)
-            rnn_output, _ = tf.nn.bidirectional_dynamic_rnn(cell_fw, cell_bw,
-                                                            concat_emb, self.sl,
-                                                            dtype=tf.float32)
-            rnn_output = extract_axis_1(rnn_output[0], self.sl-1)
-        print(rnn_output)
-        print(self.U_final_embed)
-        u_affine = tf.tensordot(rnn_output, self.U_final_embed, axes=[[0, 1], [0, 2]])\
+                                                    dtype=tf.float32)'''
+            rnn_output, _ = tf.nn.dynamic_rnn(cell_fw, 
+                                              concat_emb, self.sl,
+                                              dtype=tf.float32)
+            rnn_output = extract_axis_1(rnn_output, self.sl-1)
+        #print(rnn_output)
+        #print(self.U_final_embed)
+        '''u_affine = tf.tensordot(rnn_output, self.U_final_embed, axes=[[0, 1], [0, 2]])\
             + self.U_final_bias_embed
         print(u_affine)
         u_affine = tf.reshape(u_affine, [-1, self.latent_dim])
-        t_contrib = tf.reduce_sum(tf.multiply(u_affine, self.V_t_embed), reduction_indices=1)
+        t_contrib = tf.reduce_sum(tf.multiply(u_affine, self.V_t_embed), reduction_indices=1)'''
+        u_affine = tf.matmul(rnn_output, self.U_final) + self.U_final_bias
+        t_contrib = tf.reduce_sum(tf.multiply(u_affine, self.V_t), reduction_indices=1)
         s_contrib = tf.reduce_sum(tf.multiply(self.U_embed, self.V_embed), reduction_indices=1)
         s_contrib = tf.add(s_contrib, self.U_bias_embed)
         s_contrib = tf.add(s_contrib, self.V_bias_embed)
@@ -303,9 +316,6 @@ class RNNSMF:
         with tf.control_dependencies(update_ops):
             self.train_step = self.optimizer.minimize(self.reg_loss,
                                                         colocate_gradients_with_ops=True)
-            '''self.train_step_v = self.optimizer.minimize(self.reg_loss,
-                                                        var_list=[self.V, self.V_bias],
-                                                        colocate_gradients_with_ops=True)'''
 
         tf.summary.scalar("RMSE", self.RMSE)
         tf.summary.scalar("MAE", self.MAE)
