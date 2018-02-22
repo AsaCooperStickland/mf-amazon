@@ -397,11 +397,13 @@ class JustRNNSMF:
 
         # Should this be items * rnn_dim not users * rnn_dim???
 
-        self.U_bias = bias_variable([self.num_users], 'U_bias')
-        self.V_bias = bias_variable([self.num_items], 'V_bias')
-
         self.U_W = weight_variable([self.num_items, self.item_rnn_dim], 'U_W')
         self.R_W = weight_variable([5, self.rating_rnn_dim], 'R_W')
+
+        self.U_bias = bias_variable([self.num_users], 'U_bias')
+        self.V_bias = bias_variable([self.num_items], 'V_bias')
+        self.U_bias_embed = tf.nn.embedding_lookup(self.U_bias, self.u_idx)
+        self.V_bias_embed = tf.nn.embedding_lookup(self.V_bias, self.i_idx)
 
         self.i_hist_emb = tf.nn.embedding_lookup(self.U_W, self.i_hist)
         self.r_hist_emb = tf.nn.embedding_lookup(self.R_W, self.r_hist)
@@ -428,7 +430,7 @@ class JustRNNSMF:
         #print(self.U_final_embed)
         u_affine = tf.nn.relu(tf.matmul(rnn_output, self.U_final) + self.U_final_bias)
         t_contrib = tf.reduce_sum(tf.multiply(u_affine, self.V_t), reduction_indices=1)
-        self.r_hat = t_contrib + offset
+        self.r_hat = t_contrib + offset + self.U_bias_embed + self.V_bias_embed
 
         self.RMSE = tf.sqrt(tf.losses.mean_squared_error(self.r, self.r_hat))
         self.cost = 2 * tf.nn.l2_loss(tf.subtract(self.r, self.r_hat))
@@ -457,8 +459,8 @@ class JustRNNSMF:
 
     def train(self, sess, data, dropout):
         RMSE, MAE, cost, summary_op,\
-          train_step = sess.run([self.RMSE, self.MAE, self.cost, self.summary_op,
-                           self.train_step], feed_dict={
+          train_step, V = sess.run([self.RMSE, self.MAE, self.cost, self.summary_op,
+                           self.train_step, self.V_t], feed_dict={
                            self.u_idx: data[0],
                            self.i_idx: data[1],
                            self.r: data[2],
@@ -467,7 +469,7 @@ class JustRNNSMF:
                            self.sl: data[5],
                            self.dropout_p: dropout
                            })
-        return RMSE, MAE, cost, summary_op
+        return RMSE, MAE, cost, summary_op, V
 
     def eval(self, sess, data, dropout=1.0):
         RMSE, MAE, cost, summary_op,\

@@ -11,14 +11,13 @@ from utils.storage import build_experiment_folder, save_statistics
 from sklearn.model_selection import KFold
 
 from input_data import DataInput, DataInputTest
-from smf import RNNSMF, SMF, BaseSMF
-from rnn import JustRNNSMF
+from smf import RNNSMF, SMF, BaseSMF, JustRNNSMF
 
 tf.reset_default_graph()  # resets any previous graphs to clear memory
 parser = argparse.ArgumentParser(description='Welcome to MF experiments script')  # generates an argument parser
 parser_extractor = ParserClass(parser=parser)  # creates a parser class to process the parsed input
 
-rnn, dataset, batch_size, seed, epochs, logs_path, continue_from_epoch,\
+rnn, dataset, datapath, batch_size, seed, epochs, logs_path, continue_from_epoch,\
     tensorboard_enable, experiment_prefix, day_split, l2_weight, latent_dim,\
     learning_rate, train_fraction = parser_extractor.get_argument_variables()
 
@@ -30,7 +29,7 @@ if dataset == "ml1m":
     num_users = 6040
     num_items = 3706
     num_ratings = 1000209
-    data_dir = "/home/s1302760/mf-amazon/data/ml/"
+    data_dir = datapath + "data/ml/"
     print("Using movie-lens 1M dataset.")
 
 elif dataset == "amazon":
@@ -38,7 +37,7 @@ elif dataset == "amazon":
     num_users = 339231
     num_items = 83046
     num_ratings = 500176
-    data_dir = "/home/s1302760/mf-amazon/data/"
+    data_dir = datapath + "data/"
     print("Using Amazon datset.")
 
 else:
@@ -184,17 +183,18 @@ with tf.Session() as sess:
             with tqdm.tqdm(total=total_train_batches) as pbar_train:
                 for batch_idx, data in DataInput(train_data, batch_size):
                     iter_id = e * total_train_batches + batch_idx
-                    rmse_train, mae_train, cost, summary_op = smf.train(sess, data, dropout=0.9)
+                    rmse_train, mae_train, cost, summary_op, V = smf.train(sess, data, dropout=0.9)
+                    print(V)
                     # Here we execute u_update, v_update which train the network and also the ops that compute
                     # rmse and mae.
                     total_RMSE_loss += rmse_train
                     total_MAE_loss += mae_train
 
                     iter_out = "iter_num: {}, train_RMSE: {},"\
-                                "train_MAE: {}, batch_RMSE: {}".format(iter_id,
+                                "train_MAE: {}, batch_RMSE: {}, V {}".format(iter_id,
                                                              total_RMSE_loss / (batch_idx + 1),
                                                              total_MAE_loss / (batch_idx + 1),
-                                                             rmse_train)
+                                                             rmse_train, V)
                     pbar_train.set_description(iter_out)
                     pbar_train.update(1)
                     if batch_idx % int(update_number/batch_size) == 0:

@@ -35,7 +35,7 @@ class ParserClass(object):
         """
         rnn = True if self.args.rnn == "True" else False
         dataset = self.args.dataset
-        datapath = sef.args.datapath
+        datapath = self.args.datapath
         batch_size = self.args.batch_size
         experiment_prefix = self.args.experiment_prefix
         seed = self.args.seed
