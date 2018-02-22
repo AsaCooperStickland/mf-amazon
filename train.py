@@ -12,6 +12,7 @@ from sklearn.model_selection import KFold
 
 from input_data import DataInput, DataInputTest
 from smf import RNNSMF, SMF, BaseSMF
+from rnn import JustRNNSMF
 
 tf.reset_default_graph()  # resets any previous graphs to clear memory
 parser = argparse.ArgumentParser(description='Welcome to MF experiments script')  # generates an argument parser
@@ -98,7 +99,7 @@ def val_check(sess, best_val_RMSE_loss):
     return best_val_RMSE_loss
 
 if rnn:
-    smf = RNNSMF(num_users, num_items, latent_dim, learning_rate=learning_rate,
+    smf = JustRNNSMF(num_users, num_items, latent_dim, learning_rate=learning_rate,
              reg_lambda=l2_weight)
 else:
     smf = SMF(num_users, num_items, latent_dim, learning_rate=learning_rate,
@@ -183,7 +184,7 @@ with tf.Session() as sess:
             with tqdm.tqdm(total=total_train_batches) as pbar_train:
                 for batch_idx, data in DataInput(train_data, batch_size):
                     iter_id = e * total_train_batches + batch_idx
-                    rmse_train, mae_train, cost, summary_op = smf.train(sess, data)
+                    rmse_train, mae_train, cost, summary_op = smf.train(sess, data, dropout=0.9)
                     # Here we execute u_update, v_update which train the network and also the ops that compute
                     # rmse and mae.
                     total_RMSE_loss += rmse_train

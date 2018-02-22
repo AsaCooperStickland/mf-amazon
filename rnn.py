@@ -211,7 +211,7 @@ class SMF:
                            })
         return RMSE, MAE, cost, summary_op
 
-class RNNSMF:
+class JustRNNSMF:
     def __init__(self, num_users, num_items, latent_dim,
                  learning_rate=0.001, reg_lambda=0.01,
                  dropout_p_hidden=0.8, item_rnn_dim=10, rating_rnn_dim=2):
@@ -243,31 +243,15 @@ class RNNSMF:
 
         # Should this be items * rnn_dim not users * rnn_dim???
 
-        self.U = weight_variable([self.num_users, self.latent_dim], 'U')
-        self.V = weight_variable([self.num_items, self.latent_dim], 'V')
         self.U_bias = bias_variable([self.num_users], 'U_bias')
         self.V_bias = bias_variable([self.num_items], 'V_bias')
 
         self.U_W = weight_variable([self.num_items, self.item_rnn_dim], 'U_W')
         self.R_W = weight_variable([5, self.rating_rnn_dim], 'R_W')
 
-        self.U_embed = tf.nn.embedding_lookup(self.U, self.u_idx)
-        self.V_embed = tf.nn.embedding_lookup(self.V, self.i_idx)
-        self.U_bias_embed = tf.nn.embedding_lookup(self.U_bias, self.u_idx)
-        self.V_bias_embed = tf.nn.embedding_lookup(self.V_bias, self.i_idx)
         self.i_hist_emb = tf.nn.embedding_lookup(self.U_W, self.i_hist)
         self.r_hist_emb = tf.nn.embedding_lookup(self.R_W, self.r_hist)
-        '''
-        self.U_final = weight_variable([self.num_users, 2 * self.rnn_dim * self.latent_dim], 'U_final')
-        self.U_final_bias = weight_variable([self.num_items, self.latent_dim], 'U_final_bias')
 
-        self.U_final_embed = tf.nn.embedding_lookup(self.U_final, self.u_idx)
-        self.U_final_embed = tf.reshape(self.U_final_embed, [-1, self.latent_dim, 2 * self.rnn_dim])
-        self.U_final_bias_embed = tf.nn.embedding_lookup(self.U_final_bias, self.u_idx)
-
-        self.V_t = weight_variable([self.num_items, self.latent_dim], 'V_t')
-        self.V_t_embed = tf.nn.embedding_lookup(self.V_t, self.i_idx)'''
-        
         self.U_final = weight_variable([self.rnn_dim, self.latent_dim], 'U_final')
         self.U_final_bias = bias_variable([self.latent_dim], 'U_final_bias')
 
@@ -282,50 +266,31 @@ class RNNSMF:
                                                     state_keep_prob=self.dropout_p,
                                                     input_size=(self.rnn_dim),
                                                     dtype=tf.float32)
-            '''cell_bw = tf.contrib.rnn.DropoutWrapper(build_cell(2 * self.rnn_dim),
-                                                    variational_recurrent=True,
-                                                    input_keep_prob=0.95,
-                                                    output_keep_prob=0.95,
-                                                    state_keep_prob=0.95,
-                                                    input_size=(2 * self.rnn_dim),
-                                                    dtype=tf.float32)'''
             rnn_output, _ = tf.nn.dynamic_rnn(cell_fw, 
                                               concat_emb, self.sl,
                                               dtype=tf.float32)
             rnn_output = extract_axis_1(rnn_output, self.sl-1)
         #print(rnn_output)
         #print(self.U_final_embed)
-        '''u_affine = tf.tensordot(rnn_output, self.U_final_embed, axes=[[0, 1], [0, 2]])\
-            + self.U_final_bias_embed
-        print(u_affine)
-        u_affine = tf.reshape(u_affine, [-1, self.latent_dim])
-        t_contrib = tf.reduce_sum(tf.multiply(u_affine, self.V_t_embed), reduction_indices=1)'''
         u_affine = tf.nn.relu(tf.matmul(rnn_output, self.U_final) + self.U_final_bias)
         t_contrib = tf.reduce_sum(tf.multiply(u_affine, self.V_t), reduction_indices=1)
-        s_contrib = tf.reduce_sum(tf.multiply(self.U_embed, self.V_embed), reduction_indices=1)
-        s_contrib = tf.add(s_contrib, self.U_bias_embed)
-        s_contrib = tf.add(s_contrib, self.V_bias_embed)
-        self.r_hat = tf.add(t_contrib, s_contrib) + offset
-        #self.r_hat = t_contrib + offset
+        self.r_hat = t_contrib + offset
 
         self.RMSE = tf.sqrt(tf.losses.mean_squared_error(self.r, self.r_hat))
         self.cost = 2 * tf.nn.l2_loss(tf.subtract(self.r, self.r_hat))
         self.MAE = tf.reduce_mean(tf.abs(tf.subtract(self.r, self.r_hat)))
-        self.reg = tf.add(tf.multiply(self.reg_lambda, tf.nn.l2_loss(self.U)), tf.multiply(self.reg_lambda, tf.nn.l2_loss(self.V)))
-        self.reg_loss = tf.add(self.cost, self.reg)
-        #self.reg_loss = self.cost
 
         self.optimizer = tf.train.GradientDescentOptimizer(self.learning_rate)
         # self.train_step = self.optimizer.minimize(self.reg_loss)
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)  # Needed for correct batch norm usage
         with tf.control_dependencies(update_ops):
-            self.train_step = self.optimizer.minimize(self.reg_loss,
+            self.train_step = self.optimizer.minimize(self.cost,
                                                         colocate_gradients_with_ops=True)
 
         tf.summary.scalar("RMSE", self.RMSE)
         tf.summary.scalar("MAE", self.MAE)
         tf.summary.scalar("Cost", self.cost)
-        tf.summary.scalar("Reg-Loss", self.reg_loss)
+        tf.summary.scalar("Reg-Loss", self.cost)
 
         # add op for merging summary
         self.summary_op = tf.summary.merge_all()
