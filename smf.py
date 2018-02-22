@@ -223,7 +223,7 @@ class RNNSMF:
         self.rnn_dim = item_rnn_dim + rating_rnn_dim
         self.learning_rate = learning_rate
         self.reg_lambda = tf.constant(reg_lambda, dtype=tf.float32)
-        
+
 
         self.dropout_p = tf.placeholder(tf.float32, [])
         self.u_idx = tf.placeholder(tf.int32, [None, ])  # [B]
@@ -267,7 +267,7 @@ class RNNSMF:
 
         self.V_t = weight_variable([self.num_items, self.latent_dim], 'V_t')
         self.V_t_embed = tf.nn.embedding_lookup(self.V_t, self.i_idx)'''
-        
+
         self.U_final = weight_variable([self.rnn_dim, self.latent_dim], 'U_final')
         self.U_final_bias = bias_variable([self.latent_dim], 'U_final_bias')
 
@@ -289,7 +289,7 @@ class RNNSMF:
                                                     state_keep_prob=0.95,
                                                     input_size=(2 * self.rnn_dim),
                                                     dtype=tf.float32)'''
-            rnn_output, _ = tf.nn.dynamic_rnn(cell_fw, 
+            rnn_output, _ = tf.nn.dynamic_rnn(cell_fw,
                                               concat_emb, self.sl,
                                               dtype=tf.float32)
             rnn_output = extract_axis_1(rnn_output, self.sl-1)
@@ -326,6 +326,125 @@ class RNNSMF:
         tf.summary.scalar("MAE", self.MAE)
         tf.summary.scalar("Cost", self.cost)
         tf.summary.scalar("Reg-Loss", self.reg_loss)
+
+        # add op for merging summary
+        self.summary_op = tf.summary.merge_all()
+
+        # add Saver ops
+        self.saver = tf.train.Saver()
+
+        return self.RMSE, self.MAE, self.cost, self.summary_op,\
+            self.train_step
+
+    def train(self, sess, data, dropout):
+        RMSE, MAE, cost, summary_op,\
+          train_step = sess.run([self.RMSE, self.MAE, self.cost, self.summary_op,
+                           self.train_step], feed_dict={
+                           self.u_idx: data[0],
+                           self.i_idx: data[1],
+                           self.r: data[2],
+                           self.i_hist: data[3],
+                           self.r_hist: data[4],
+                           self.sl: data[5],
+                           self.dropout_p: dropout
+                           })
+        return RMSE, MAE, cost, summary_op
+
+    def eval(self, sess, data, dropout=1.0):
+        RMSE, MAE, cost, summary_op,\
+           = sess.run([self.RMSE, self.MAE, self.cost, self.summary_op],
+                      feed_dict={
+                           self.u_idx: data[0],
+                           self.i_idx: data[1],
+                           self.r: data[2],
+                           self.i_hist: data[3],
+                           self.r_hist: data[4],
+                           self.sl: data[5],
+                           self.dropout_p: dropout
+                           })
+        return RMSE, MAE, cost, summary_op
+
+
+class JustRNNSMF:
+    def __init__(self, num_users, num_items, latent_dim,
+                 learning_rate=0.001, reg_lambda=0.01,
+                 dropout_p_hidden=0.8, item_rnn_dim=10, rating_rnn_dim=2):
+        self.num_users = num_users
+        self.num_items = num_items
+        self.latent_dim = latent_dim
+        self.item_rnn_dim = item_rnn_dim
+        self.rating_rnn_dim = rating_rnn_dim
+        self.rnn_dim = item_rnn_dim + rating_rnn_dim
+        self.learning_rate = learning_rate
+        self.reg_lambda = tf.constant(reg_lambda, dtype=tf.float32)
+
+
+        self.dropout_p = tf.placeholder(tf.float32, [])
+        self.u_idx = tf.placeholder(tf.int32, [None, ])  # [B]
+        self.i_idx = tf.placeholder(tf.int32, [None, ])  # [B]
+        #self.j = tf.placeholder(tf.int32, [None,]) # [B]
+        self.r = tf.placeholder(tf.float32, [None, ])  # [B]
+        self.i_hist = tf.placeholder(tf.int32, [None, None])  # [B, T]
+        self.r_hist = tf.placeholder(tf.int32, [None, None])  # [B, T]
+        self.sl = tf.placeholder(tf.int32, [None, ])  # [B]
+        self.lr = tf.placeholder(tf.float64, [])
+        #self.lr = tf.maximum(1e-5,tf.train.exponential_decay(self.learning_rate, self.global_step, self.decay_steps, self.decay, staircase=True))
+        #self.build_graph()
+
+    def build_graph(self, offset):
+
+        #self.U_t = weight_variable([self.num_users, self.rnn_dim], 'U_t', trainable=False)
+
+        # Should this be items * rnn_dim not users * rnn_dim???
+
+        self.U_bias = bias_variable([self.num_users], 'U_bias')
+        self.V_bias = bias_variable([self.num_items], 'V_bias')
+
+        self.U_W = weight_variable([self.num_items, self.item_rnn_dim], 'U_W')
+        self.R_W = weight_variable([5, self.rating_rnn_dim], 'R_W')
+
+        self.i_hist_emb = tf.nn.embedding_lookup(self.U_W, self.i_hist)
+        self.r_hist_emb = tf.nn.embedding_lookup(self.R_W, self.r_hist)
+
+        self.U_final = weight_variable([self.rnn_dim, self.latent_dim], 'U_final')
+        self.U_final_bias = bias_variable([self.latent_dim], 'U_final_bias')
+
+        self.V_t = weight_variable([self.latent_dim], 'V_t')
+        concat_emb = tf.concat([self.i_hist_emb, self.r_hist_emb], 2)
+        with tf.name_scope("rnn"):
+
+            cell_fw = tf.contrib.rnn.DropoutWrapper(build_cell(self.rnn_dim),
+                                                    variational_recurrent=True,
+                                                    input_keep_prob=self.dropout_p,
+                                                    output_keep_prob=self.dropout_p,
+                                                    state_keep_prob=self.dropout_p,
+                                                    input_size=(self.rnn_dim),
+                                                    dtype=tf.float32)
+            rnn_output, _ = tf.nn.dynamic_rnn(cell_fw,
+                                              concat_emb, self.sl,
+                                              dtype=tf.float32)
+            rnn_output = extract_axis_1(rnn_output, self.sl-1)
+        #print(rnn_output)
+        #print(self.U_final_embed)
+        u_affine = tf.nn.relu(tf.matmul(rnn_output, self.U_final) + self.U_final_bias)
+        t_contrib = tf.reduce_sum(tf.multiply(u_affine, self.V_t), reduction_indices=1)
+        self.r_hat = t_contrib + offset
+
+        self.RMSE = tf.sqrt(tf.losses.mean_squared_error(self.r, self.r_hat))
+        self.cost = 2 * tf.nn.l2_loss(tf.subtract(self.r, self.r_hat))
+        self.MAE = tf.reduce_mean(tf.abs(tf.subtract(self.r, self.r_hat)))
+
+        self.optimizer = tf.train.GradientDescentOptimizer(self.learning_rate)
+        # self.train_step = self.optimizer.minimize(self.reg_loss)
+        update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)  # Needed for correct batch norm usage
+        with tf.control_dependencies(update_ops):
+            self.train_step = self.optimizer.minimize(self.cost,
+                                                        colocate_gradients_with_ops=True)
+
+        tf.summary.scalar("RMSE", self.RMSE)
+        tf.summary.scalar("MAE", self.MAE)
+        tf.summary.scalar("Cost", self.cost)
+        tf.summary.scalar("Reg-Loss", self.cost)
 
         # add op for merging summary
         self.summary_op = tf.summary.merge_all()

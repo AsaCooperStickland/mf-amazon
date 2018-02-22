@@ -6,6 +6,7 @@ class ParserClass(object):
         """
         parser.add_argument('--rnn', nargs="?", type=str, default="False", help='wheter to use RNN')
         parser.add_argument('--dataset', nargs="?", type=str, default="amazon", help='dataset to use')
+        parser.add_argument('--datapath', nargs="?", type=str, default="/home/s1302760/mf-amazon/", help='path to data')
         parser.add_argument('--batch_size', nargs="?", type=int, default=256, help='batch_size for experiment')
         parser.add_argument('--epochs', type=int, nargs="?", default=15, help='Number of epochs to train for')
         parser.add_argument('--logs_path', type=str, nargs="?", default="logs/",
@@ -34,6 +35,7 @@ class ParserClass(object):
         """
         rnn = True if self.args.rnn == "True" else False
         dataset = self.args.dataset
+        datapath = sef.args.datapath
         batch_size = self.args.batch_size
         experiment_prefix = self.args.experiment_prefix
         seed = self.args.seed
@@ -47,6 +49,6 @@ class ParserClass(object):
         learning_rate = self.args.learning_rate
         train_fraction = self.args.train_fraction
 
-        return rnn, dataset, batch_size, seed, epochs, logs_path, continue_from_epoch,\
+        return rnn, dataset, datapath, batch_size, seed, epochs, logs_path, continue_from_epoch,\
             tensorboard_enable, experiment_prefix, day_split, l2_weight,\
             latent_dim, learning_rate, train_fraction
