@@ -17,7 +17,7 @@ tf.reset_default_graph()  # resets any previous graphs to clear memory
 parser = argparse.ArgumentParser(description='Welcome to MF experiments script')  # generates an argument parser
 parser_extractor = ParserClass(parser=parser)  # creates a parser class to process the parsed input
 
-rnn, dataset, datapath, batch_size, seed, epochs, logs_path, continue_from_epoch,\
+model, dataset, datapath, batch_size, seed, epochs, logs_path, continue_from_epoch,\
     tensorboard_enable, experiment_prefix, day_split, l2_weight, latent_dim,\
     learning_rate, train_fraction = parser_extractor.get_argument_variables()
 
@@ -44,7 +44,7 @@ else:
     raise NameError("Unrecognized dataset!")
 
 
-experiment_name = "rnn_{}_experiment_{}_batch_size_{}_l2_{}_dim_{}_frac_{}_lr_{}".format(rnn,
+experiment_name = "model_{}_experiment_{}_batch_size_{}_l2_{}_dim_{}_frac_{}_lr_{}".format(model,
                                                                    experiment_prefix,
                                                                    batch_size, l2_weight,
                                                                    latent_dim, train_fraction,
@@ -97,12 +97,11 @@ def val_check(sess, best_val_RMSE_loss):
                      -1, -1])
     return best_val_RMSE_loss
 
-if rnn:
-    smf = JustRNNSMF(num_users, num_items, latent_dim, learning_rate=learning_rate,
+model_dict = {'rnn': RNNSMF, 'smf': SMF, 'base': BaseSMF, 'justrnn': JustRNNSMF}
+
+smf = model_dict[model](num_users, num_items, latent_dim, learning_rate=learning_rate,
              reg_lambda=l2_weight)
-else:
-    smf = SMF(num_users, num_items, latent_dim, learning_rate=learning_rate,
-             reg_lambda=l2_weight)
+
 smf.build_graph(offset)
 
 if continue_from_epoch == -1:  # if this is a new experiment and not
@@ -183,18 +182,17 @@ with tf.Session() as sess:
             with tqdm.tqdm(total=total_train_batches) as pbar_train:
                 for batch_idx, data in DataInput(train_data, batch_size):
                     iter_id = e * total_train_batches + batch_idx
-                    rmse_train, mae_train, cost, summary_op, V = smf.train(sess, data, dropout=0.9)
-                    print(V)
+                    rmse_train, mae_train, cost, summary_op = smf.train(sess, data, dropout=0.9)
                     # Here we execute u_update, v_update which train the network and also the ops that compute
                     # rmse and mae.
                     total_RMSE_loss += rmse_train
                     total_MAE_loss += mae_train
 
                     iter_out = "iter_num: {}, train_RMSE: {},"\
-                                "train_MAE: {}, batch_RMSE: {}, V {}".format(iter_id,
+                                "train_MAE: {}, batch_RMSE: {}".format(iter_id,
                                                              total_RMSE_loss / (batch_idx + 1),
                                                              total_MAE_loss / (batch_idx + 1),
-                                                             rmse_train, V)
+                                                             rmse_train)
                     pbar_train.set_description(iter_out)
                     pbar_train.update(1)
                     if batch_idx % int(update_number/batch_size) == 0:

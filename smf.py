@@ -71,47 +71,54 @@ def calc_running_avg_loss(loss, running_avg_loss, step, decay=0.99):
 
 class BaseSMF:
     def __init__(self, num_users, num_items, latent_dim,
-                 learning_rate=0.001, batch_size=256, reg_lambda=0.01):
+                 learning_rate=0.001, reg_lambda=0.01,
+                 dropout_p_hidden=0.8, item_rnn_dim=10, rating_rnn_dim=2):
         self.num_users = num_users
         self.num_items = num_items
         self.latent_dim = latent_dim
+        self.item_rnn_dim = item_rnn_dim
+        self.rating_rnn_dim = rating_rnn_dim
+        self.rnn_dim = item_rnn_dim + rating_rnn_dim
         self.learning_rate = learning_rate
-        self.batch_size = batch_size
         self.reg_lambda = tf.constant(reg_lambda, dtype=tf.float32)
+
+
+        self.dropout_p = tf.placeholder(tf.float32, [])
+        self.u_idx = tf.placeholder(tf.int32, [None, ])  # [B]
+        self.i_idx = tf.placeholder(tf.int32, [None, ])  # [B]
+        #self.j = tf.placeholder(tf.int32, [None,]) # [B]
+        self.r = tf.placeholder(tf.float32, [None, ])  # [B]
+        self.i_hist = tf.placeholder(tf.int32, [None, None])  # [B, T]
+        self.r_hist = tf.placeholder(tf.int32, [None, None])  # [B, T]
+        self.sl = tf.placeholder(tf.int32, [None, ])  # [B]
+        self.lr = tf.placeholder(tf.float64, [])
         #self.lr = tf.maximum(1e-5,tf.train.exponential_decay(self.learning_rate, self.global_step, self.decay_steps, self.decay, staircase=True))
         #self.build_graph()
 
-    def build_graph(self, u_idx, v_idx, r):
-        #u_idx = tf.placeholder(tf.int32, [None])
-        #v_idx = tf.placeholder(tf.int32, [None])
-        #r = tf.placeholder(tf.float32, [None])
+    def build_graph(self, offset):
 
-        self.U_bias = weight_variable([self.num_users], 'U_bias')
+        self.U_bias = bias_variable([self.num_users], 'U_bias')
+        self.V_bias = bias_variable([self.num_items], 'V_bias')
+        self.U_bias_embed = tf.nn.embedding_lookup(self.U_bias, self.u_idx)
+        self.V_bias_embed = tf.nn.embedding_lookup(self.V_bias, self.i_idx)
 
-        self.U_bias_embed = tf.nn.embedding_lookup(self.U_bias, u_idx)
-        #self.V_bias_embed = tf.nn.embedding_lookup(self.V_bias, v_idx)
-        self.r_hat = self.U_bias_embed
-        #self.r_hat = tf.add(self.r_hat, self.V_bias_embed)
+        self.r_hat = offset + self.U_bias_embed + self.V_bias_embed
 
-        self.RMSE = tf.sqrt(tf.losses.mean_squared_error(r, self.r_hat))
-        self.l2_loss = tf.nn.l2_loss(tf.subtract(r, self.r_hat))
-        self.MAE = tf.reduce_mean(tf.abs(tf.subtract(r, self.r_hat)))
-        #self.reg = tf.add(tf.multiply(self.reg_lambda, tf.nn.l2_loss(self.U)), tf.multiply(self.reg_lambda, tf.nn.l2_loss(self.V)))
-        self.reg_loss = self.l2_loss
+        self.RMSE = tf.sqrt(tf.losses.mean_squared_error(self.r, self.r_hat))
+        self.cost = 2 * tf.nn.l2_loss(tf.subtract(self.r, self.r_hat))
+        self.MAE = tf.reduce_mean(tf.abs(tf.subtract(self.r, self.r_hat)))
 
-        self.optimizer = tf.train.AdamOptimizer(self.learning_rate)
+        self.optimizer = tf.train.GradientDescentOptimizer(self.learning_rate)
         # self.train_step = self.optimizer.minimize(self.reg_loss)
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)  # Needed for correct batch norm usage
         with tf.control_dependencies(update_ops):
-            self.train_step_u = self.optimizer.minimize(self.reg_loss,
-                                                        var_list=[self.U_bias],
+            self.train_step = self.optimizer.minimize(self.cost,
                                                         colocate_gradients_with_ops=True)
-
 
         tf.summary.scalar("RMSE", self.RMSE)
         tf.summary.scalar("MAE", self.MAE)
-        tf.summary.scalar("L2-Loss", self.l2_loss)
-        tf.summary.scalar("Reg-Loss", self.reg_loss)
+        tf.summary.scalar("Cost", self.cost)
+        tf.summary.scalar("Reg-Loss", self.cost)
 
         # add op for merging summary
         self.summary_op = tf.summary.merge_all()
@@ -119,8 +126,36 @@ class BaseSMF:
         # add Saver ops
         self.saver = tf.train.Saver()
 
-        return self.RMSE, self.MAE, self.l2_loss, self.summary_op,\
-            self.train_step_u
+        return self.RMSE, self.MAE, self.cost, self.summary_op,\
+            self.train_step
+
+    def train(self, sess, data, dropout):
+        RMSE, MAE, cost, summary_op,\
+          train_step = sess.run([self.RMSE, self.MAE, self.cost, self.summary_op,
+                           self.train_step], feed_dict={
+                           self.u_idx: data[0],
+                           self.i_idx: data[1],
+                           self.r: data[2],
+                           self.i_hist: data[3],
+                           self.r_hist: data[4],
+                           self.sl: data[5],
+                           self.dropout_p: dropout
+                           })
+        return RMSE, MAE, cost, summary_op
+
+    def eval(self, sess, data, dropout=1.0):
+        RMSE, MAE, cost, summary_op,\
+           = sess.run([self.RMSE, self.MAE, self.cost, self.summary_op],
+                      feed_dict={
+                           self.u_idx: data[0],
+                           self.i_idx: data[1],
+                           self.r: data[2],
+                           self.i_hist: data[3],
+                           self.r_hist: data[4],
+                           self.sl: data[5],
+                           self.dropout_p: dropout
+                           })
+        return RMSE, MAE, cost, summary_op
 
 
 class SMF:
@@ -135,6 +170,7 @@ class SMF:
         self.u_idx = tf.placeholder(tf.int32, [None, ])  # [B]
         self.i_idx = tf.placeholder(tf.int32, [None, ])  # [B]
         self.r = tf.placeholder(tf.float32, [None, ])
+        self.dropout_p = tf.placeholder(tf.float32, [])
 
 
     def build_graph(self, offset):
@@ -142,15 +178,15 @@ class SMF:
         #v_idx = tf.placeholder(tf.int32, [None])
         #r = tf.placeholder(tf.float32, [None])
 
-        self.U = weight_variable([self.num_users, self.latent_dim], 'U')
-        self.V = weight_variable([self.num_items, self.latent_dim], 'V')
+        self.U = bias_variable([self.num_users, self.latent_dim], 'U')
+        self.V = bias_variable([self.num_items, self.latent_dim], 'V')
         self.U_bias = bias_variable([self.num_users], 'U_bias')
         self.V_bias = bias_variable([self.num_items], 'V_bias')
 
         self.U_embed = tf.nn.embedding_lookup(self.U, self.u_idx)
-        self.U_embed = tf.nn.dropout(self.U_embed, 0.9)
+        #self.U_embed = tf.nn.dropout(self.U_embed, 0.9)
         self.V_embed = tf.nn.embedding_lookup(self.V, self.i_idx)
-        self.V_embed = tf.nn.dropout(self.V_embed, 0.9)
+        #self.V_embed = tf.nn.dropout(self.V_embed, 0.9)
         self.U_bias_embed = tf.nn.embedding_lookup(self.U_bias, self.u_idx)
         self.V_bias_embed = tf.nn.embedding_lookup(self.V_bias, self.i_idx)
         self.r_hat = tf.reduce_sum(tf.multiply(self.U_embed, self.V_embed), reduction_indices=1)
@@ -189,7 +225,7 @@ class SMF:
             self.train_step_u, self.train_step_v, self.V_bias
 
 
-    def train(self, sess, data):
+    def train(self, sess, data, dropout):
         RMSE, MAE, cost, summary_op,\
           train_step_u, train_step_v = sess.run([self.RMSE, self.MAE,
                            self.cost, self.summary_op,
@@ -197,17 +233,19 @@ class SMF:
                            self.u_idx: data[0],
                            self.i_idx: data[1],
                            self.r: data[2],
+                           self.dropout_p: dropout
                            })
         return RMSE, MAE, cost, summary_op
 
 
-    def eval(self, sess, data):
+    def eval(self, sess, data, dropout=1.0):
         RMSE, MAE, cost, summary_op,\
            = sess.run([self.RMSE, self.MAE, self.cost, self.summary_op],
                       feed_dict={
                            self.u_idx: data[0],
                            self.i_idx: data[1],
                            self.r: data[2],
+                           self.dropout_p: dropout
                            })
         return RMSE, MAE, cost, summary_op
 
@@ -459,8 +497,8 @@ class JustRNNSMF:
 
     def train(self, sess, data, dropout):
         RMSE, MAE, cost, summary_op,\
-          train_step, V = sess.run([self.RMSE, self.MAE, self.cost, self.summary_op,
-                           self.train_step, self.V_t], feed_dict={
+          train_step = sess.run([self.RMSE, self.MAE, self.cost, self.summary_op,
+                           self.train_step], feed_dict={
                            self.u_idx: data[0],
                            self.i_idx: data[1],
                            self.r: data[2],
@@ -469,7 +507,7 @@ class JustRNNSMF:
                            self.sl: data[5],
                            self.dropout_p: dropout
                            })
-        return RMSE, MAE, cost, summary_op, V
+        return RMSE, MAE, cost, summary_op
 
     def eval(self, sess, data, dropout=1.0):
         RMSE, MAE, cost, summary_op,\
