@@ -11,7 +11,7 @@ from utils.storage import build_experiment_folder, save_statistics
 from sklearn.model_selection import KFold
 
 from input_data import DataInput, DataInputTest
-from smf import RNNSMF, SMF, BaseSMF, JustRNNSMF
+from smf import RNNSMF, SMF, BaseSMF, JustRNNSMF, AttnRNNSMF
 
 tf.reset_default_graph()  # resets any previous graphs to clear memory
 parser = argparse.ArgumentParser(description='Welcome to MF experiments script')  # generates an argument parser
@@ -97,7 +97,8 @@ def val_check(sess, best_val_RMSE_loss):
                      -1, -1])
     return best_val_RMSE_loss
 
-model_dict = {'rnn': RNNSMF, 'smf': SMF, 'base': BaseSMF, 'justrnn': JustRNNSMF}
+model_dict = {'rnn': RNNSMF, 'smf': SMF, 'base': BaseSMF, 'justrnn': JustRNNSMF,
+              'attn': AttnRNNSMF}
 
 smf = model_dict[model](num_users, num_items, latent_dim, learning_rate=learning_rate,
              reg_lambda=l2_weight)
