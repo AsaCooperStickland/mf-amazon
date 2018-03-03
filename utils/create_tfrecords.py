@@ -17,7 +17,7 @@ import pandas as pd
 import datetime as dt
 import pickle
 
-data_dir = '../data/'
+data_dir = '../data/am_sort/'
 
 gap = np.array([2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096])
 # gap = [2, 7, 15, 30, 60,]
@@ -25,6 +25,10 @@ gap = np.array([2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096])
 # gap = np.array(gap)
 def get_key(item):
     return item[2]
+
+
+def get_key5(item):
+    return item[5]
 
 
 def proc_time_emb(hist_t, cur_t):
@@ -72,12 +76,43 @@ def split_data(data_list, num_rating):
             print(time)
             print(time // 3600 // 24 // 365 - 28 + 1997)'''
 
-    train_list = data_list[:int(0.8*num_rating)]
-    test = data_list[int(0.8*num_rating):]
-    random.shuffle(test)
+    train_list = data_list[:int(0.9*num_rating)]
+    test = data_list[int(0.9*num_rating):]
     val_list, test_list = test[:int(0.5*len(test))], test[int(0.5*len(test)):]
-    val_list, test_list = sorted(val_list, key=get_key), sorted(test_list, key=get_key)
     return train_list, val_list, test_list, test
+
+
+def process_for_rnn(data_list, time=False):
+    labels = ['UserId', 'ItemId', 'time', 'rating', 'day']
+    data = pd.DataFrame.from_records(data_list, columns=labels)
+    new_list = []
+    for UserID, data_point in data.groupby('UserId'):
+        for day, day_data in data_point.groupby('day'):
+            item_list = day_data['ItemId'].tolist()
+            ratings_list = day_data['rating'].tolist()
+            for i in range(len(item_list)):
+                new_list.append((UserID, item_list[:i], ratings_list[:i], item_list[i], ratings_list[i], day))
+    if time:
+        new_list = sorted(new_list, key=get_key5)
+    return new_list
+
+
+def write_to_pd(data_list, out_file):
+    """Reads the tokenized .story files corresponding to the urls listed in the url_file and writes them to a out_file."""
+    labels = ['UserId', 'ItemList', 'RatingList', 'item', 'rating', 'day']
+    data = pd.DataFrame.from_records(data_list, columns=labels)
+
+    with open(data_dir + out_file + '.pkl', 'wb') as f:
+        pickle.dump(data, f)
+    print("Finished writing files %s\n" % out_file)
+
+
+def write_to_list(data_list, out_file):
+    """Reads the tokenized .story files corresponding to the urls listed in the url_file and writes them to a out_file."""
+
+    with open(data_dir + out_file + '.pkl', 'wb') as f:
+        pickle.dump(data_list, f)
+    print("Finished writing files %s\n" % out_file)
 
 
 def _int64_feature(value):
@@ -194,6 +229,15 @@ all_train_set = []
 all_train_list, ratings = gen_data(all_train_set)
 train_list, val_list, test_list, test = split_data(all_train_list, ratings)
 av_error(train_list, val_list)
+rnn_train_list = process_for_rnn(train_list, True)
+rnn_val_list = process_for_rnn(val_list, True)
+rnn_test_list = process_for_rnn(test_list, True)
+rnn_test = process_for_rnn(test, True)
+print('Writing to list...')
+write_to_list(rnn_train_list, 'train_dataset')
+write_to_list(rnn_val_list, 'val_dataset')
+write_to_list(rnn_test_list, 'test_dataset')
+write_to_list(rnn_test, 'all_test_dataset')
 '''print('Writing to tfrecords...')
 write_to_bin(train_list, 'train_dataset')
 write_to_bin(val_list, 'val_dataset')

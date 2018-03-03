@@ -27,6 +27,10 @@ def get_key(item):
     return item[2]
 
 
+def get_key5(item):
+    return item[5]
+
+
 def proc_time_emb(hist_t, cur_t):
      hist_t = [cur_t - i + 1 for i in hist_t]
      hist_t = [np.sum(i >= gap) for i in hist_t]
@@ -79,7 +83,7 @@ def split_data(data_list, num_rating):
     return train_list, val_list, test_list, test
 
 
-def process_for_rnn(data_list):
+def process_for_rnn(data_list, time=False):
     labels = ['UserId', 'ItemId', 'time', 'rating', 'day']
     data = pd.DataFrame.from_records(data_list, columns=labels)
     new_list = []
@@ -89,6 +93,8 @@ def process_for_rnn(data_list):
             ratings_list = day_data['rating'].tolist()
             for i in range(len(item_list)):
                 new_list.append((UserID, item_list[:i], ratings_list[:i], item_list[i], ratings_list[i], day))
+    if time:
+        new_list = sorted(new_list, key=get_key5)
     return new_list
 
 
@@ -224,15 +230,15 @@ all_train_set = []
 all_train_list, ratings = gen_data(all_train_set)
 train_list, val_list, test_list, test = split_data(all_train_list, ratings)
 av_error(train_list, val_list)
-rnn_train_list = process_for_rnn(train_list)
-rnn_val_list = process_for_rnn(val_list)
-rnn_test_list = process_for_rnn(test_list)
-rnn_test = process_for_rnn(test)
+rnn_train_list = process_for_rnn(train_list, True)
+rnn_val_list = process_for_rnn(val_list, True)
+rnn_test_list = process_for_rnn(test_list, True)
+rnn_test = process_for_rnn(test, True)
 print('Writing to list...')
-'''write_to_list(rnn_train_list, 'train_dataset')
+write_to_list(rnn_train_list, 'train_dataset')
 write_to_list(rnn_val_list, 'val_dataset')
 write_to_list(rnn_test_list, 'test_dataset')
-write_to_list(rnn_test, 'all_test_dataset')'''
+write_to_list(rnn_test, 'all_test_dataset')
 '''print('Writing to tfrecords...')
 write_to_bin(train_list, 'train_dataset')
 write_to_bin(val_list, 'val_dataset')
