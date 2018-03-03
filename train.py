@@ -17,7 +17,7 @@ tf.reset_default_graph()  # resets any previous graphs to clear memory
 parser = argparse.ArgumentParser(description='Welcome to MF experiments script')  # generates an argument parser
 parser_extractor = ParserClass(parser=parser)  # creates a parser class to process the parsed input
 
-model, dataset, datapath, batch_size, seed, epochs, logs_path, continue_from_epoch,\
+model, dataset, datapath, start, end, batch_size, seed, epochs, logs_path, continue_from_epoch,\
     tensorboard_enable, experiment_prefix, day_split, l2_weight, latent_dim,\
     learning_rate, train_fraction = parser_extractor.get_argument_variables()
 
@@ -29,7 +29,7 @@ if dataset == "ml1m":
     num_users = 6040
     num_items = 3706
     num_ratings = 1000209
-    data_dir = datapath + "data/ml/"
+    data_dir = datapath + "data/ml_sort/"
     print("Using movie-lens 1M dataset.")
 
 elif dataset == "amazon":
@@ -37,18 +37,18 @@ elif dataset == "amazon":
     num_users = 339231
     num_items = 83046
     num_ratings = 500176
-    data_dir = datapath + "data/"
+    data_dir = datapath + "data/am_sort/"
     print("Using Amazon datset.")
 
 else:
     raise NameError("Unrecognized dataset!")
 
 
-experiment_name = "model_{}_experiment_{}_batch_size_{}_l2_{}_dim_{}_frac_{}_lr_{}".format(model,
+experiment_name = "model_{}_experiment_{}_batch_size_{}_l2_{}_dim_{}_frac_{}_lr_{}_st_{}_en_{}".format(model,
                                                                    experiment_prefix,
                                                                    batch_size, l2_weight,
                                                                    latent_dim, train_fraction,
-                                                                   learning_rate)
+                                                                   learning_rate, start, end)
 batch_sizes = [256, 512, 1024]
 # reg_lambdas = [0, 1e-10, 1e-7, 1e-5]
 reg_lambdas = [2, 1e-5, 1e-3, 1e-1, 1]
@@ -141,14 +141,15 @@ global_step = tf.Variable(0, name='global_step', trainable=False)
 val_saver = tf.train.Saver()
 
 train_size = int(0.9*num_ratings)
+real_train_size = int((end - start) * train_size)
 val_size = int(0.5*(num_ratings - train_size))
 
 if day_split:
-    total_train_batches = int(train_examples/batch_size)
-    print('Using {} examples out of total {}'.format(train_examples, train_size))
+    total_train_batches = int(real_train_examples/batch_size)
+    print('Using {} examples out of total {}'.format(train_examples, real_train_size))
 else:
-    total_train_batches = int(train_size/batch_size)
-    print('Using {} examples out of total {}'.format(train_size, train_size))
+    total_train_batches = int(real_train_size/batch_size)
+    print('Using {} examples out of total {}'.format(real_train_size, real_train_size))
 total_val_batches = int(val_size/batch_size)
 print('val size', val_size)
 print('divide', (total_val_batches * batch_size))
@@ -181,7 +182,7 @@ with tf.Session() as sess:
             total_RMSE_loss = 0.
             total_MAE_loss = 0.
             with tqdm.tqdm(total=total_train_batches) as pbar_train:
-                for batch_idx, data in DataInput(train_data, batch_size):
+                for batch_idx, data in DataInput(train_data, batch_size, start=start, end=end):
                     iter_id = e * total_train_batches + batch_idx
                     rmse_train, mae_train, cost, summary_op = smf.train(sess, data, dropout=0.9)
                     # Here we execute u_update, v_update which train the network and also the ops that compute

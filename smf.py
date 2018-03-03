@@ -598,6 +598,7 @@ class RNNSMF:
         self.U_bias_embed = tf.nn.embedding_lookup(self.U_bias, self.u_idx)
         self.V_bias_embed = tf.nn.embedding_lookup(self.V_bias, self.i_idx)
         self.i_hist_emb = tf.nn.embedding_lookup(self.U_W, self.i_hist)
+        self.i_next_emb = tf.nn.embedding_lookup(self.U_W, self.i_idx)
         self.r_hist_emb = tf.nn.embedding_lookup(self.R_W, self.r_hist)
         '''
         self.U_final = weight_variable([self.num_users, 2 * self.rnn_dim * self.latent_dim], 'U_final')
@@ -642,7 +643,9 @@ class RNNSMF:
         print(u_affine)
         u_affine = tf.reshape(u_affine, [-1, self.latent_dim])
         t_contrib = tf.reduce_sum(tf.multiply(u_affine, self.V_t_embed), reduction_indices=1)'''
-        u_affine = tf.nn.relu(tf.matmul(rnn_output, self.U_final) + self.U_final_bias)
+        rnn_concat = tf.concat([rnn_output, self.i_next_emb], 1)
+        u_affine = tf.layers.dense(rnn_concat, self.latent_dim, activation = tf.nn.relu)
+        #u_affine = tf.nn.relu(tf.matmul(rnn_output, self.U_final) + self.U_final_bias)
         t_contrib = tf.reduce_sum(tf.multiply(u_affine, self.V_t), reduction_indices=1)
         s_contrib = tf.reduce_sum(tf.multiply(self.U_embed, self.V_embed), reduction_indices=1)
         s_contrib = tf.add(s_contrib, self.U_bias_embed)
@@ -781,7 +784,8 @@ class AttnRNNSMF:
                                               concat_emb, self.sl,
                                               dtype=tf.float32)
             #rnn_output = extract_axis_1(rnn_output, self.sl-1)
-        print(rnn_output)
+        print(rnn_output) 
+
         print(self.i_next_emb)
         rnn_output = vanilla_attention(self.i_next_emb, rnn_output, self.sl)
         rnn_output = tf.reshape(rnn_output, [-1, self.rnn_dim])

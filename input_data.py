@@ -2,9 +2,9 @@ import numpy as np
 
 class DataInput:
 
-    def __init__(self, data, batch_size):
+    def __init__(self, data, batch_size, start=0.0, end=1.0):
         self.batch_size = batch_size
-        self.data = data
+        self.data = data[int(start * len(data)): int(end * len(data))]
         self.epoch_size = len(self.data) // self.batch_size
         if self.epoch_size * self.batch_size < len(self.data):
             self.epoch_size += 1

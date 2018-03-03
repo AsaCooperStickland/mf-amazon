@@ -7,6 +7,8 @@ class ParserClass(object):
         parser.add_argument('--model', nargs="?", type=str, default="smf", help='which model to use')
         parser.add_argument('--dataset', nargs="?", type=str, default="amazon", help='dataset to use')
         parser.add_argument('--datapath', nargs="?", type=str, default="/home/s1302760/mf-amazon/", help='path to data')
+        parser.add_argument('--start', nargs="?", type=float, default=0.0, help='Fraction of training data to use')
+        parser.add_argument('--end', nargs="?", type=float, default=1.0, help='Fraction of training data to use')
         parser.add_argument('--batch_size', nargs="?", type=int, default=256, help='batch_size for experiment')
         parser.add_argument('--epochs', type=int, nargs="?", default=15, help='Number of epochs to train for')
         parser.add_argument('--logs_path', type=str, nargs="?", default="logs/",
@@ -36,6 +38,8 @@ class ParserClass(object):
         model = self.args.model
         dataset = self.args.dataset
         datapath = self.args.datapath
+        start = self.args.start
+        end = self.args.end
         batch_size = self.args.batch_size
         experiment_prefix = self.args.experiment_prefix
         seed = self.args.seed
@@ -49,6 +53,6 @@ class ParserClass(object):
         learning_rate = self.args.learning_rate
         train_fraction = self.args.train_fraction
 
-        return model, dataset, datapath, batch_size, seed, epochs, logs_path, continue_from_epoch,\
+        return model, dataset, datapath, start, end, batch_size, seed, epochs, logs_path, continue_from_epoch,\
             tensorboard_enable, experiment_prefix, day_split, l2_weight,\
             latent_dim, learning_rate, train_fraction
